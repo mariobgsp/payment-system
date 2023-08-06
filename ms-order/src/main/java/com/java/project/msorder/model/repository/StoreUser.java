@@ -13,7 +13,7 @@ public class StoreUser {
     private String firstName;
     private String lastName;
     private String email;
-    private String password;
+    private String hashPassword;
     private boolean specialProduct;
     private boolean recurring;
     private String token;

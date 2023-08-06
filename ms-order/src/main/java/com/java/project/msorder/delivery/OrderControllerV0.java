@@ -11,8 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/ms/api")
-@Slf4j
-public class OrderController {
+public class OrderControllerV0 {
 
     @Autowired
     private OrderUsecase orderUsecase;
