@@ -3,6 +3,7 @@ package com.java.project.msorder.repository;
 import com.java.project.msorder.model.repository.Product;
 import com.java.project.msorder.model.repository.StoreUser;
 import com.java.project.msorder.repository.impl.StoreImplementationRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
@@ -14,8 +15,7 @@ public class StoreRepository implements StoreImplementationRepository {
 
     private JdbcTemplate jdbcTemplate;
 
-
-    public StoreRepository(JdbcTemplate jdbcTemplate) {
+    public StoreRepository(@Qualifier("ms-jdbc-template")JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -56,7 +56,7 @@ public class StoreRepository implements StoreImplementationRepository {
     }
     @Override
     public List<Product> getAvailableProduct() {
-        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTSTATUS = 'TRUE'";
+        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTSTATUS = 'true'";
         return jdbcTemplate.query(sql, rowMapper);
     }
     @Override
@@ -64,9 +64,14 @@ public class StoreRepository implements StoreImplementationRepository {
         String sql = "SELECT ID, USERID, USERNAME, FIRSTNAME, LASTNAME, EMAIL, PASSWORD, SPECIALPRODUCT, RECURRING, TOKEN FROM STORE.STORE_USER WHERE USERNAME = ?";
         return jdbcTemplate.query(sql, rowMapperUser, userName);
     }
-
-    public List<Product> getSpecificProduct(String spFlag){
-        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE SPECIALPRODUCT = ? AND PRODUCTSTATUS = 'TRUE'";
+    @Override
+    public List<Product> getSingleProduct(String productCode) {
+        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTCODE = ? AND PRODUCTSTATUS = 'true'";
+        return jdbcTemplate.query(sql, rowMapper, productCode);
+    }
+    @Override
+    public List<Product> getSpecialProduct(String spFlag){
+        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE SPECIALPRODUCT = ? AND PRODUCTSTATUS = 'true'";
         return jdbcTemplate.query(sql, rowMapper, spFlag.toUpperCase());
     }
 }

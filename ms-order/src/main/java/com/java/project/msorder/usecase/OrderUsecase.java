@@ -1,29 +1,37 @@
 package com.java.project.msorder.usecase;
 
+import com.java.project.msorder.config.properties.AppProperties;
+import com.java.project.msorder.exception.definition.CommonException;
+import com.java.project.msorder.exception.handler.BadRequestException;
+import com.java.project.msorder.exception.handler.ProductNotFoundException;
+import com.java.project.msorder.exception.handler.UserNotFoundException;
 import com.java.project.msorder.model.repository.Product;
 import com.java.project.msorder.model.repository.StoreUser;
 import com.java.project.msorder.model.rqrs.request.RequestInfo;
-import com.java.project.msorder.model.rqrs.response.Response;
+import com.java.project.msorder.model.rqrs.request.order.OrderRq;
 import com.java.project.msorder.model.rqrs.response.ResponseInfo;
 import com.java.project.msorder.model.rqrs.response.ViewProductRs;
 import com.java.project.msorder.repository.StoreRepository;
+import com.java.project.msorder.utils.ResponseUtils;
+import com.java.project.msorder.utils.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.catalina.Store;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.condition.ProducesRequestCondition;
 
 import java.util.ArrayList;
 import java.util.List;
+
 
 @Component
 @Slf4j
 public class OrderUsecase {
 
     @Autowired
+    private AppProperties appProperties;
+    @Autowired
     private StoreRepository storeRepository;
-
 
     public ResponseInfo<Object> viewProduct(RequestInfo requestInfo, String username){
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
@@ -31,6 +39,9 @@ public class OrderUsecase {
         try{
             // check user
             List<StoreUser> storeUsers = storeRepository.getUserDetail(username);
+            if(storeUsers.size()==0){
+                throw new UserNotFoundException("01", "User not allowed or not available to view product");
+            }
             StoreUser storeUser = storeUsers.get(0);
 
             List<Product> productList = new ArrayList<>();
@@ -42,7 +53,7 @@ public class OrderUsecase {
             }else{
                 log.info("Normal users: {}", username);
                 // assign to get false special product
-                productList = storeRepository.getSpecificProduct(String.valueOf(storeUser.isSpecialProduct()));
+                productList = storeRepository.getSpecialProduct(String.valueOf(storeUser.isSpecialProduct()));
             }
 
             // gather all product
@@ -60,120 +71,13 @@ public class OrderUsecase {
                 viewProductRs.add(vp);
             }
 
-            // construct response
-            Response<Object> response = new Response<>();
-            response.setCode("00");
-            response.setStatus("ok");
-            response.setMessage("request-success");
-            response.setData(viewProductRs);
-
-            responseInfo.setHttpStatus(HttpStatus.OK);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
-
+            // set success
+            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, viewProductRs);
         }catch (Exception e){
-            Response<Object> response = new Response<>();
-            response.setCode("99");
-            response.setStatus("failed");
-            response.setMessage(String.format("failed, cause:%s", e.getMessage()));
-            response.setData(null);
-
-            responseInfo.setHttpStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
+            CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
+            responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
 
-        return responseInfo;
-    }
-
-    public ResponseInfo<Object> getAllProduct(RequestInfo requestInfo){
-        ResponseInfo<Object> responseInfo = new ResponseInfo<>();
-
-        try{
-            // fetch all product
-            List<Product> productList = storeRepository.getAllProduct();
-
-            Response<Object> response = new Response<>();
-            response.setCode("00");
-            response.setStatus("ok");
-            response.setMessage("request-success");
-            response.setData(productList);
-
-            responseInfo.setHttpStatus(HttpStatus.OK);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
-
-        }catch (Exception e){
-
-            Response<Object> response = new Response<>();
-            response.setCode("99");
-            response.setStatus("failed");
-            response.setMessage(String.format("failed, cause:%s", e.getMessage()));
-            response.setData(null);
-
-            responseInfo.setHttpStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
-
-        }
-        return responseInfo;
-    }
-
-
-    public ResponseInfo<Object> getAvailableProduct(RequestInfo requestInfo){
-        ResponseInfo<Object> responseInfo = new ResponseInfo<>();
-
-        try{
-            // fetch all product
-            List<Product> productList = storeRepository.getAvailableProduct();
-
-            Response<Object> response = new Response<>();
-            response.setCode("00");
-            response.setStatus("ok");
-            response.setMessage("request-success");
-            response.setData(productList);
-
-            responseInfo.setHttpStatus(HttpStatus.OK);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
-
-        }catch (Exception e){
-
-            Response<Object> response = new Response<>();
-            response.setCode("99");
-            response.setStatus("failed");
-            response.setMessage(String.format("failed, cause:%s", e.getMessage()));
-            response.setData(null);
-
-            responseInfo.setHttpStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
-
-        }
         return responseInfo;
     }
 
@@ -184,37 +88,59 @@ public class OrderUsecase {
         try{
             // get user detail
             List<StoreUser> storeUsers = storeRepository.getUserDetail(username);
+            if(storeUsers.size()==0){
+                throw new UserNotFoundException("01", "User not allowed or not available to view product");
+            }
+            //set success
+            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, storeUsers);
+        }catch (Exception e){
+            CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
+            responseInfo = ResponseUtils.generateException(requestInfo, ex);
+        }
+        return responseInfo;
+    }
 
-            Response<Object> response = new Response<>();
-            response.setCode("00");
-            response.setStatus("ok");
-            response.setMessage("request-success");
-            response.setData(storeUsers);
 
-            responseInfo.setHttpStatus(HttpStatus.OK);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
+    public ResponseInfo<Object> orderProduct(RequestInfo requestInfo, String username, OrderRq bodyRq){
+        ResponseInfo<Object> responseInfo = new ResponseInfo<>();
+        try{
+            // validate request body
+            if(StringUtils.isEmpty(bodyRq.getProductCode())
+                    || StringUtils.isEmpty(bodyRq.getProductName())
+                    || StringUtils.isEmpty(bodyRq.getUserDetail().getUsername())
+                    || StringUtils.isEmpty(bodyRq.getUserDetail().getPassword())){
+                throw new BadRequestException("03", "Invalid value should not be empty");
+            }
+
+            // validate users
+            if(!username.equals(bodyRq.getUserDetail().getUsername())){
+                throw new BadRequestException("04", "Invalid username with req body");
+            }
+            List<StoreUser> storeUsers = storeRepository.getUserDetail(username);
+            if(storeUsers.size()==0){
+                throw new UserNotFoundException("01", "User not allowed or not available to view product");
+            }
+            String hashPassword = SecurityUtils.encodeRequestBody(bodyRq.getUserDetail().getPassword(), appProperties.SECRET_KEY);
+            if(!hashPassword.equals(bodyRq.getUserDetail().getPassword())){
+                throw new BadRequestException("05", "Invalid username with req body");
+            }
+
+            // check product if available
+            List<Product> productList = storeRepository.getSpecialProduct(bodyRq.getProductCode());
+            if(productList.size()==0){
+                throw new ProductNotFoundException("02", "Product Not Available");
+            }
+            Product product = productList.get(0);
+            if(product.getPrice()!=bodyRq.getPrice()){
+                throw new BadRequestException("06", String.format("Price not match should be %s", product.getPrice()));
+            }
+
+
+
 
         }catch (Exception e){
-
-            Response<Object> response = new Response<>();
-            response.setCode("99");
-            response.setStatus("failed");
-            response.setMessage(String.format("failed, cause:%s", e.getMessage()));
-            response.setData(null);
-
-            responseInfo.setHttpStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-            HttpHeaders httpHeaders = new HttpHeaders();
-            httpHeaders.add("x-request-id", requestInfo.getRequestId());
-            httpHeaders.add("x-channel-id", requestInfo.getChannel());
-            httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
-            responseInfo.setHttpHeaders(httpHeaders);
-            responseInfo.setResponse(response);
-
+            CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
+            responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
         return responseInfo;
     }

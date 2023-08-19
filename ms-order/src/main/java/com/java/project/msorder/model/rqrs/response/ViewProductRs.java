@@ -6,6 +6,7 @@ import lombok.experimental.Accessors;
 @Data
 @Accessors(chain = true)
 public class ViewProductRs {
+
     private String productCode;
     private String productName;
     private Integer price;

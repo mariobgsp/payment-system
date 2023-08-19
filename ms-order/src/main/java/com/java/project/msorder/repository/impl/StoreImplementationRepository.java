@@ -10,4 +10,6 @@ public interface StoreImplementationRepository {
     List<Product> getAllProduct();
     List<Product> getAvailableProduct();
     List<StoreUser> getUserDetail(String userName);
+    List<Product> getSingleProduct(String productCode);
+    List<Product> getSpecialProduct(String spFlag);
 }
