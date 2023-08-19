@@ -7,10 +7,11 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-@Component
+@Repository
 public class StoreRepository implements StoreImplementationRepository {
 
     private JdbcTemplate jdbcTemplate;
@@ -22,13 +23,13 @@ public class StoreRepository implements StoreImplementationRepository {
     RowMapper<Product> rowMapper = (rs, rowNum) ->{
         Product product = new Product();
         product.setProductId(rs.getInt("PRODUCTID"));
-        product.setProductStatus(Boolean.parseBoolean(rs.getString("PRODUCTSTATUS")));
+        product.setProductStatus(rs.getBoolean("PRODUCTSTATUS"));
         product.setProductCode(rs.getString("PRODUCTCODE"));
         product.setProductName(rs.getString("PRODUCTNAME"));
         product.setPrice(rs.getInt("PRICE"));
         product.setDiscount(rs.getDouble("DISCOUNT"));
-        product.setEnableDiscount(Boolean.parseBoolean(rs.getString("ENABLEDISCOUNT")));
-        product.setSpecialProductLabel(Boolean.parseBoolean(rs.getString("SPECIALPRODUCT")));
+        product.setEnableDiscount(rs.getBoolean("ENABLEDISCOUNT"));
+        product.setSpecialProductLabel(rs.getBoolean("SPECIALPRODUCT"));
         product.setProductUpdate(rs.getString("PRODUCTUPDATEDATE"));
         product.setProductInsert(rs.getString("PRODUCTINSERTDATE"));
         return product;
@@ -56,7 +57,7 @@ public class StoreRepository implements StoreImplementationRepository {
     }
     @Override
     public List<Product> getAvailableProduct() {
-        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTSTATUS = 'true'";
+        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTSTATUS = true ";
         return jdbcTemplate.query(sql, rowMapper);
     }
     @Override
@@ -66,12 +67,13 @@ public class StoreRepository implements StoreImplementationRepository {
     }
     @Override
     public List<Product> getSingleProduct(String productCode) {
-        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTCODE = ? AND PRODUCTSTATUS = 'true'";
+        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE PRODUCTCODE = ? AND PRODUCTSTATUS is true ";
         return jdbcTemplate.query(sql, rowMapper, productCode);
     }
+
     @Override
-    public List<Product> getSpecialProduct(String spFlag){
-        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE SPECIALPRODUCT = ? AND PRODUCTSTATUS = 'true'";
-        return jdbcTemplate.query(sql, rowMapper, spFlag.toUpperCase());
+    public List<Product> getSpecialProduct(boolean spFlag){
+        String sql = "SELECT PRODUCTID, PRODUCTSTATUS, PRODUCTCODE, PRODUCTNAME, PRICE, DISCOUNT, ENABLEDISCOUNT, SPECIALPRODUCT, PRODUCTUPDATEDATE, PRODUCTINSERTDATE FROM STORE.PRODUCT WHERE SPECIALPRODUCT is {boolean} AND PRODUCTSTATUS is true ".replace("{boolean}", String.valueOf(spFlag));
+        return jdbcTemplate.query(sql, rowMapper);
     }
 }
