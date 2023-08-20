@@ -10,6 +10,8 @@ public class ProductTrx {
     private String id;
     private String sysCreationDate;
     private String transactionId;
+    private String orderStatus;
+    private String paymentStatus;
     private String userId;
     private String productName;
     private Long amount;

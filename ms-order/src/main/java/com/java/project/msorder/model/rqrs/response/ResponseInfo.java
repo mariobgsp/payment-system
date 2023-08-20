@@ -15,6 +15,4 @@ public class ResponseInfo<T> {
     @JsonIgnore
     private HttpHeaders httpHeaders;
     private Response<T> body;
-    private List<ApiFault> faults;
-
 }

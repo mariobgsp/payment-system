@@ -62,5 +62,22 @@ public class OrderControllerV1 {
         return new ResponseEntity<>(response.getBody(), response.getHttpHeaders(), response.getHttpStatus());
     }
 
+    @GetMapping("/v1/order/{transactionid}/check")
+    public ResponseEntity<?> getOrderStatus(
+            @PathVariable("transactionid") String transactionId,
+            @RequestParam(value="user_name", required = false) String username,
+            @RequestHeader(value="x-request-channel") String channel,
+            @RequestHeader(value="x-request-id") String requestId,
+            HttpServletRequest httpServletRequest
+    ){
+        // construct request info
+        RequestInfo request = CommonUtils.constructRequestInfo(channel, "get-transaction-status", requestId, transactionId, httpServletRequest);
+        log.info("[{}][REQUEST RECEIVED][{}][by: {}]",requestId, request.getOpName(), transactionId);
+        ResponseInfo<Object> response = orderUsecase.checkProduct(request, username, transactionId);
+        log.info("[{}][REQUEST COMPLETED][{}][response: {}]",requestId, request.getOpName(), response);
+
+        return new ResponseEntity<>(response.getBody(), response.getHttpHeaders(), response.getHttpStatus());
+    }
+
 
 }

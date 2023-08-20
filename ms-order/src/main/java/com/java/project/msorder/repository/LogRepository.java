@@ -3,11 +3,10 @@ package com.java.project.msorder.repository;
 import com.java.project.msorder.config.properties.AppProperties;
 import com.java.project.msorder.exception.definition.CommonException;
 import com.java.project.msorder.model.repository.ProductTrx;
-import com.java.project.msorder.model.repository.StoreUser;
+import com.java.project.msorder.model.repository.rowmapper.ProductTrxRowMapper;
 import com.java.project.msorder.model.rqrs.request.RequestInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -17,38 +16,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Repository
-public class ProductTrxRepository {
+public class LogRepository {
     @Autowired
     private AppProperties appProperties;
     private NamedParameterJdbcTemplate jdbcTemplate;
 
-    public ProductTrxRepository(AppProperties appProperties, @Qualifier("transaction-jdbc")NamedParameterJdbcTemplate jdbcTemplate) {
+    public LogRepository(AppProperties appProperties, @Qualifier("transaction-jdbc")NamedParameterJdbcTemplate jdbcTemplate) {
         this.appProperties = appProperties;
         this.jdbcTemplate = jdbcTemplate;
     }
-
-    RowMapper<ProductTrx> rowMapperProductTrx = (rs, rowNum) ->{
-        ProductTrx productTrx = new ProductTrx();
-        productTrx.setId(rs.getString("id"));
-        productTrx.setSysCreationDate(rs.getString("sys_creation_date"));
-        productTrx.setSysUpdateDate(rs.getString("transactionid"));
-        productTrx.setOrderStatus(rs.getString("orderstatus"));
-        productTrx.setPaymentStatus(rs.getString("paymentstatus"));
-        productTrx.setUserId(rs.getString("userid"));
-        productTrx.setProductName(rs.getString("productname"));
-        productTrx.setAmount(Long.valueOf(rs.getString("amount")));
-        productTrx.setPrice(Long.valueOf(rs.getString("price")));
-        productTrx.setPriceCharge(Long.valueOf(rs.getString("pricecharge")));
-        productTrx.setProductCode(rs.getString("productcode"));
-        productTrx.setParam_1(rs.getString("param_1"));
-        productTrx.setParam_2(rs.getString("param_2"));
-        productTrx.setSysUpdateDate(rs.getString("sys_update_date"));
-        productTrx.setPaymentDate(rs.getString("payment_date"));
-        productTrx.setDiscountEnabled(Boolean.parseBoolean(rs.getString("discount_enabled")));
-        productTrx.setDiscount(Double.valueOf(rs.getString("discount")));
-        return productTrx;
-    };
-
 
     public void insertProductTrx(RequestInfo requestInfo, ProductTrx productTrx) throws CommonException {
         try {
@@ -80,10 +56,12 @@ public class ProductTrxRepository {
         List<ProductTrx> productTrxes = new ArrayList<>();
 
         try{
-            MapSqlParameterSource parameterSource = new MapSqlParameterSource();
-            parameterSource.addValue("transactionid", transactionId);
+            String sql = "SELECT id, sys_creation_date, transactionid, orderstatus, paymentstatus, userid, productname, amount, price, pricecharge, productcode, param_1, param_2, sys_update_date, payment_date, discount_enabled, discount FROM transaction.product_trx where transactionid = :trxid ";
 
-            productTrxes = jdbcTemplate.query(appProperties.getQUERY_GET_PRODUCT_TRX_BY_TRANSACTIONID(), parameterSource, rowMapperProductTrx);
+            MapSqlParameterSource parameterSource = new MapSqlParameterSource();
+            parameterSource.addValue("trxid", transactionId);
+
+            productTrxes = jdbcTemplate.query(sql, parameterSource, new ProductTrxRowMapper());
         }catch (Exception e){
             throw new CommonException(e);
         }

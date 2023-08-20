@@ -4,6 +4,7 @@ import com.java.project.msorder.config.properties.AppProperties;
 import com.java.project.msorder.exception.definition.CommonException;
 import com.java.project.msorder.exception.handler.BadRequestException;
 import com.java.project.msorder.exception.handler.ProductNotFoundException;
+import com.java.project.msorder.exception.handler.TransactionNotFoundException;
 import com.java.project.msorder.exception.handler.UserNotFoundException;
 import com.java.project.msorder.model.repository.Product;
 import com.java.project.msorder.model.repository.ProductTrx;
@@ -13,7 +14,7 @@ import com.java.project.msorder.model.rqrs.request.order.OrderRq;
 import com.java.project.msorder.model.rqrs.response.ResponseInfo;
 import com.java.project.msorder.model.rqrs.response.ViewProductRs;
 import com.java.project.msorder.model.rqrs.response.order.OrderRs;
-import com.java.project.msorder.repository.ProductTrxRepository;
+import com.java.project.msorder.repository.LogRepository;
 import com.java.project.msorder.repository.StoreRepository;
 import com.java.project.msorder.utils.CommonUtils;
 import com.java.project.msorder.utils.ResponseUtils;
@@ -22,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.mvc.condition.ProducesRequestCondition;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -34,11 +34,12 @@ import java.util.UUID;
 @Slf4j
 public class OrderUsecase {
 
+    @Autowired
     private AppProperties appProperties;
     @Autowired
     private StoreRepository storeRepository;
     @Autowired
-    private ProductTrxRepository productTrxRepository;
+    private LogRepository logRepository;
 
     public ResponseInfo<Object> viewProduct(RequestInfo requestInfo, String username){
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
@@ -127,6 +128,11 @@ public class OrderUsecase {
             if(storeUsers.size()==0){
                 throw new UserNotFoundException("01", "User not allowed or not available to view product");
             }
+            String hashPassword = SecurityUtils.encodeRequestBody(bodyRq.getUserDetail().getPassword(), appProperties.getSECRET_KEY());
+            if(!hashPassword.equals(storeUsers.get(0).getHashPassword())){
+                throw new BadRequestException("05", "Invalid password");
+            }
+
             // check product if available
             List<Product> productList = storeRepository.getSingleProduct(bodyRq.getProductCode());
             if(productList.size()==0){
@@ -146,16 +152,19 @@ public class OrderUsecase {
             }else {
                 price = bodyRq.getPrice();
             }
+
             // count total charge
             price = price * bodyRq.getAmount();
 
             // construct transaction Id
-            String transactionId = "PTRX-"+productTrxRepository.getSequence(requestInfo);
+            String transactionId = "PTRX-"+ logRepository.getSequence(requestInfo);
 
             // construct insert model
             ProductTrx productTrx = new ProductTrx()
                     .setId("MSO-"+UUID.randomUUID())
                     .setTransactionId(transactionId)
+                    .setOrderStatus(appProperties.getORDER_STATUS_CREATED())
+                    .setPaymentStatus(appProperties.getPAYMENT_STATUS_CREATED())
                     .setUserId(storeUsers.get(0).getUserId())
                     .setProductName(product.getProductName())
                     .setAmount((long) bodyRq.getAmount())
@@ -164,10 +173,11 @@ public class OrderUsecase {
                     .setProductCode(product.getProductCode())
                     .setParam_1(null)
                     .setParam_2(null)
+                    .setDiscount(product.getDiscount())
                     .setDiscountEnabled(bodyRq.isEnableDiscount());
 
             // insert into transaction database
-            productTrxRepository.insertProductTrx(requestInfo, productTrx);
+            logRepository.insertProductTrx(requestInfo, productTrx);
 
             OrderRs orderRs = new OrderRs()
                     .setCreatedAt(CommonUtils.dateFormatter(new Date()))
@@ -179,6 +189,29 @@ public class OrderUsecase {
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
+        return responseInfo;
+    }
+
+    public ResponseInfo<Object> checkProduct(RequestInfo requestInfo, String username, String transactionId){
+        ResponseInfo<Object> responseInfo = new ResponseInfo<>();
+
+        try{
+            // check user
+            List<StoreUser> storeUsers = storeRepository.getUserDetail(username);
+            if(storeUsers.size()==0){
+                throw new UserNotFoundException("01", "User not exist");
+            }
+            List<ProductTrx> productTrxes = logRepository.getProductTrx(requestInfo, transactionId);
+            if(productTrxes.size()==0){
+                throw new TransactionNotFoundException("08", "Transaction not exist");
+            }
+
+            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, productTrxes);
+        }catch (Exception e){
+            CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
+            responseInfo = ResponseUtils.generateException(requestInfo, ex);
+        }
+
         return responseInfo;
     }
 
