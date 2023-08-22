@@ -14,8 +14,9 @@ services:
       - "8080:8080"
     depends_on:
       - postgres
-
+      
   postgres:
+    container_name: postgres
     image: 'postgres:15-alpine3.17'
     ports:
       - "5432:5432"
@@ -24,7 +25,7 @@ services:
       mode: replicated
       replicas: 1
     environment:
-      - POSTGRES_MULTIPLE_DATABASES=ms,transaction
+      - POSTGRES_MULTIPLE_DATABASES=ms,transaction,log
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
     volumes:
@@ -36,7 +37,7 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_DATABASE: logs
+      MONGO_INITDB_DATABASE: servicelog
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
     volumes:
