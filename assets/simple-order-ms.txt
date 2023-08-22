@@ -1,0 +1,69 @@
+title simple-order-service (java)
+
+actor "User" as us
+
+participant "ms-order" as mso
+database "store.user" as stru
+database "store.product" as strp
+database "store.transaction" as strtrx
+
+participant "ms-payment" as mp
+participant "ms-payment-partner" as mpp
+database db-partner
+
+participant "ms-invoice" as mis
+
+us->mso:get user info\n
+activate mso
+mso->mso:validate user
+mso->stru:get user info from db
+mso<--stru:return
+us<--mso:response
+deactivate mso
+us->mso:get product
+activate mso
+mso->stru:check user eligibility
+mso->strp:get available product
+mso<--strp:return
+us<--mso:response
+deactivate mso
+
+us->mso:post create order
+activate mso
+mso->stru:validate user
+mso->strp:get single product
+mso->strtrx:store user trx
+us<-mso:response
+deactivate mso
+
+us->mp:post create payment
+activate mp
+strtrx<-mp:get transaction
+strtrx<-mp:update into READY
+mp->mpp:send payment to partner
+mpp->db-partner:store into partner balance, reduce merchant balance
+mp<--mpp:ok
+us<--mp:return response {link}
+deactivate mp
+us->us:finish payment
+us->mp:check status
+activate mp
+strtrx<-mp:get transaction
+mp->mpp:check to partner
+mp<--mpp:response
+us<-mp:response
+deactivate mp
+
+mp<-mpp:notify
+activate mp
+mp->mp:validating credentials
+mp->strtrx:get transaction id
+strtrx<-mp:update into INPROGRESS
+mp->mis:create invoice
+activate mis
+deactivate mp
+mis->stru:get user info
+strp<-mis:get product detail
+strtrx<-mis:get transaction status
+mis->mis:construct email, send success transaction,\nEND
+deactivate mis
