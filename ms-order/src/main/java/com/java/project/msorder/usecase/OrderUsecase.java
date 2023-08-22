@@ -42,6 +42,7 @@ public class OrderUsecase {
     private LogRepository logRepository;
 
     public ResponseInfo<Object> viewProduct(RequestInfo requestInfo, String username){
+        log.info("[{} - viewProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try{
@@ -82,15 +83,17 @@ public class OrderUsecase {
             // set success
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, viewProductRs);
         }catch (Exception e){
+            log.error("[{} - getAllproduct][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
-
+        log.info("[{} - viewProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         return responseInfo;
     }
 
 
     public ResponseInfo<Object> getUserInfo(RequestInfo requestInfo, String username){
+        log.info("[{} - getUserInfo][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try{
@@ -102,14 +105,17 @@ public class OrderUsecase {
             //set success
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, storeUsers);
         }catch (Exception e){
+            log.error("[{} - getUserInfo][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
-        }
+        }   
+        log.info("[{} - getUserInfo][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         return responseInfo;
     }
 
 
     public ResponseInfo<Object> orderProduct(RequestInfo requestInfo, String username, OrderRq bodyRq){
+        log.info("[{} - orderProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
         try{
             // validate request body
@@ -186,13 +192,16 @@ public class OrderUsecase {
             // set response
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, orderRs);
         }catch (Exception e){
+            log.error("[{} - orderProduct][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
+        log.info("[{} - orderProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         return responseInfo;
     }
 
     public ResponseInfo<Object> checkProduct(RequestInfo requestInfo, String username, String transactionId){
+        log.info("[{} - checkProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try{
@@ -208,10 +217,11 @@ public class OrderUsecase {
 
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, productTrxes);
         }catch (Exception e){
+            log.error("[{} - checkProduct][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
-
+        log.info("[{} - checkProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         return responseInfo;
     }
 

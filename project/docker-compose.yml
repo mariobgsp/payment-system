@@ -1,0 +1,43 @@
+version: "3.7"
+
+services:
+
+  ms-order:
+    build: 
+      context: ./../ms-order
+      dockerfile: ./ms-order.dockerfile
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: 'postgres:15-alpine3.17'
+    ports:
+      - "5432:5432"
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      - POSTGRES_MULTIPLE_DATABASES=ms,transaction
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - ./db-data/postgres/:/var/lib/postgresql/data/
+      - ./pg-init-scripts:/docker-entrypoint-initdb.d
+
+  mongo:
+    image: 'mongo:4.2.16-bionic'
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: logs
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - ./db-data/mongo/:/data/db

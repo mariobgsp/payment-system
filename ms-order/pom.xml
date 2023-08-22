@@ -10,9 +10,9 @@
 	</parent>
 	<groupId>com.example</groupId>
 	<artifactId>ms-order</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.0.1</version>
 	<name>ms-order</name>
-	<description>microservice to order, product info, and user info</description>
+	<description>microservice to order, product info, user info, check transaction</description>
 	<properties>
 		<java.version>17</java.version>
 	</properties>

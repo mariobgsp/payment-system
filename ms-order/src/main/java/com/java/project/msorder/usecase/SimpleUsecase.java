@@ -21,6 +21,7 @@ public class SimpleUsecase {
     @Autowired
     private StoreRepository storeRepository;
     public ResponseInfo<Object> getAllProduct(RequestInfo requestInfo){
+        log.info("[{} - getAllproduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try{
@@ -32,14 +33,17 @@ public class SimpleUsecase {
             //set success
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, productList);
         }catch (Exception e){
+            log.error("[{} - getAllproduct][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
+        log.info("[{} - getAllproduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         return responseInfo;
     }
 
 
     public ResponseInfo<Object> getAvailableProduct(RequestInfo requestInfo){
+        log.info("[{} - getAvailableProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try{
@@ -51,9 +55,11 @@ public class SimpleUsecase {
             //set success
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, productList);
         }catch (Exception e){
+            log.error("[{} - getAvailableProduct][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
+        log.info("[{} - getAvailableProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         return responseInfo;
     }
 }

@@ -8,8 +8,6 @@ import com.java.project.msorder.model.repository.rowmapper.StoreUserRowMapper;
 import com.java.project.msorder.repository.impl.StoreImplementationRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
