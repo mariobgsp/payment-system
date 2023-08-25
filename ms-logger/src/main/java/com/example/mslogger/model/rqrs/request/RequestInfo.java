@@ -1,4 +1,4 @@
-package com.example.msorder.model.rqrs.request;
+package com.example.mslogger.model.rqrs.request;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;

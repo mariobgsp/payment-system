@@ -1,9 +1,10 @@
-package com.utils;
+package com.example.mslogger.utils;
 
+import com.example.mslogger.exception.definition.CommonException;
 import com.example.mslogger.model.rqrs.request.RequestInfo;
 import com.example.mslogger.model.rqrs.response.Response;
 import com.example.mslogger.model.rqrs.response.ResponseInfo;
-import com.exception.definition.CommonException;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 

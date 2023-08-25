@@ -1,4 +1,4 @@
-package com.exception.definition;
+package com.example.mslogger.exception.definition;
 
 import lombok.Getter;
 import lombok.Setter;

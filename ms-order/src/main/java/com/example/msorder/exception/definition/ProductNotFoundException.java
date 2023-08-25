@@ -1,4 +1,4 @@
-package com.example.msorder.exception.handler;
+package com.example.msorder.exception.definition;
 
 import org.springframework.http.HttpStatus;
 

@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.example.msorder.exception.definition.CommonException;
-import com.example.msorder.exception.handler.ProductNotFoundException;
+import com.example.msorder.exception.definition.ProductNotFoundException;
 import com.example.msorder.model.repository.Product;
 import com.example.msorder.model.rqrs.request.RequestInfo;
 import com.example.msorder.model.rqrs.response.ResponseInfo;

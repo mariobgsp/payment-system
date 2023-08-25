@@ -1,4 +1,4 @@
-package com.java.project.msorder.model.rqrs.response;
+package com.example.mslogger.model.rqrs.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;

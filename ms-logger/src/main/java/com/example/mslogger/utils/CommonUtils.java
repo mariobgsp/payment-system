@@ -1,4 +1,4 @@
-package com.utils;
+package com.example.mslogger.utils;
 
 import com.example.mslogger.config.variable.ApplicationConstant;
 import com.example.mslogger.model.rqrs.request.RequestInfo;

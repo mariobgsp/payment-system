@@ -7,10 +7,10 @@ import org.springframework.stereotype.Component;
 
 import com.example.msorder.config.properties.AppProperties;
 import com.example.msorder.exception.definition.CommonException;
-import com.example.msorder.exception.handler.BadRequestException;
-import com.example.msorder.exception.handler.ProductNotFoundException;
-import com.example.msorder.exception.handler.TransactionNotFoundException;
-import com.example.msorder.exception.handler.UserNotFoundException;
+import com.example.msorder.exception.definition.BadRequestException;
+import com.example.msorder.exception.definition.ProductNotFoundException;
+import com.example.msorder.exception.definition.TransactionNotFoundException;
+import com.example.msorder.exception.definition.UserNotFoundException;
 import com.example.msorder.model.repository.Product;
 import com.example.msorder.model.repository.ProductTrx;
 import com.example.msorder.model.repository.StoreUser;
