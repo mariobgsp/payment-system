@@ -1,13 +1,9 @@
 package com.example.mslogger.model.repository;
 
-import com.example.mslogger.model.rqrs.request.RequestInfo;
-import com.example.mslogger.model.rqrs.response.ResponseInfo;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
-import java.net.http.HttpHeaders;
 import java.util.Date;
 import java.util.Map;
 
