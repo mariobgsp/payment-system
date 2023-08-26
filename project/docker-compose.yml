@@ -14,7 +14,23 @@ services:
       - "8080:8080"
     depends_on:
       - postgres
-      
+  
+  ms-logger:
+    build: 
+      context: ./../ms-logger
+      dockerfile: ./ms-logger.dockerfile
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    ports:
+      - "1337:1337"
+    depends_on:
+      - mongo
+      - kafka
+      - zookeeper
+      - kafka-ui
+
   postgres:
     container_name: postgres
     image: 'postgres:15-alpine3.17'
@@ -25,7 +41,7 @@ services:
       mode: replicated
       replicas: 1
     environment:
-      - POSTGRES_MULTIPLE_DATABASES=ms,transaction,log
+      - POSTGRES_MULTIPLE_DATABASES=ms,transaction
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
     volumes:
@@ -45,27 +61,33 @@ services:
 
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
-    container_name: zookeeper
     environment:
-      ZOOKEEPER_SERVER_ID: 1
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "22181:2181"
-
-  broker:
+      - 22181:2181
+  
+  kafka:
     image: confluentinc/cp-kafka:latest
-    container_name: broker
-    ports:
-      - "9092:9092"
     depends_on:
       - zookeeper
+    ports:
+      - 29092:29092
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+    ports:
+      - 8090:8080
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181

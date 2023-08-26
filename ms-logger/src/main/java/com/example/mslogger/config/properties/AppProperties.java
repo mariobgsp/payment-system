@@ -13,14 +13,9 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class AppProperties {
 
-    private String APPLICATION_NAME = "ms-order";
+    private String APPLICATION_NAME = "ms-logger";
 
-    private String SECRET_KEY = "bXlvbmx5X3Bhc3N3b3JkOg==";
-    private String ORDER_STATUS_CREATED = "CREATED";
-    private String PAYMENT_STATUS_CREATED = "CREATED";
-
-    // mongodb client
-    private String MONGODB_URI = "mongodb://admin:password@localhost:27017";
-    private String MONGODB_DATABASE_NAME = "servicelog";
-
+    // kafka
+    private String SERVICELOG_KAFKA_TOPIC = "servicelog";
+    private String SERVICELOG_KAFKA_GROUP_ID = "service_log";
 }
