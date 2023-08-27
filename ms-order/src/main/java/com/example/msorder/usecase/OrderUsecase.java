@@ -33,7 +33,7 @@ import java.util.UUID;
 
 @Component
 @Slf4j
-public class OrderUsecase {
+public class OrderUsecase extends BaseUsecase{
 
     @Autowired
     private AppProperties appProperties;
@@ -89,6 +89,7 @@ public class OrderUsecase {
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
         log.info("[{} - viewProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
+        super.publish(requestInfo, responseInfo);
         return responseInfo;
     }
 
@@ -110,7 +111,8 @@ public class OrderUsecase {
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }   
-        log.info("[{} - getUserInfo][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
+        log.info("[{} - getUserInfo][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData()); 
+        super.publish(requestInfo, responseInfo);
         return responseInfo;
     }
 
@@ -198,6 +200,7 @@ public class OrderUsecase {
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
         log.info("[{} - orderProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
+        super.publish(requestInfo, responseInfo);
         return responseInfo;
     }
 
@@ -223,6 +226,7 @@ public class OrderUsecase {
             responseInfo = ResponseUtils.generateException(requestInfo, ex);
         }
         log.info("[{} - checkProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
+        super.publish(requestInfo, responseInfo);
         return responseInfo;
     }
 
