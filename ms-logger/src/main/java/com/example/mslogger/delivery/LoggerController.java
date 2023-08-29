@@ -2,7 +2,7 @@ package com.example.mslogger.delivery;
 
 import java.util.UUID;
 
-import com.example.mslogger.model.kafka.MessageDto;
+import com.example.mslogger.model.repository.ServiceLog;
 import com.example.mslogger.service.KafkaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.mslogger.model.repository.Logs;
 import com.example.mslogger.model.rqrs.request.RequestInfo;
 import com.example.mslogger.model.rqrs.response.ResponseInfo;
 import com.example.mslogger.utils.CommonUtils;
@@ -38,11 +37,11 @@ public class LoggerController {
         ResponseInfo<Object> response = ResponseUtils.generateMessageSuccessRs(request, "success-publishing-message");
 
         // construct payload
-        Logs insertLogs = LogsUtils.construcInsertLogs(request, response);
+        ServiceLog insertServiceLog = LogsUtils.construcInsertLogs(request, response);
 
         // publish to topic
         try{
-            loggerPublisher.publish(CommonUtils.gson.toJson(new MessageDto(CommonUtils.gson.toJson(insertLogs), "servicelogs")));
+            loggerPublisher.publish(CommonUtils.gson.toJson(insertServiceLog));
         }catch(Exception e){
             log.error("error publish message {}", e.getMessage());
         }

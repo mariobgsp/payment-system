@@ -1,5 +1,7 @@
 package com.example.mslogger.repository;
 
+import com.example.mslogger.config.variable.ApplicationConstant;
+import com.example.mslogger.model.repository.ServiceLog;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -12,16 +14,17 @@ import lombok.extern.slf4j.Slf4j;
 public class MongoRepository {
 
     @Autowired
-    @Qualifier("mongo-template")
+    @Qualifier(ApplicationConstant.BEAN_MONGO_TEMPLATE)
     private MongoTemplate mongoTemplate;
 
-    public void insertToMongodb(Object object){
+    public void insertToMongodb(ServiceLog serviceLog){
         try{
+
             // insert
-            mongoTemplate.insert(object);
-            log.info("success insert logs, {}", object);
+            mongoTemplate.insert(serviceLog);
+            MongoRepository.log.info("success insert serviceLog, {}", serviceLog.getRequestId());
         }catch(Exception e){
-            log.error("error insert to mongodb {}", e.getMessage());
+            MongoRepository.log.error("error insert to mongodb {}", e.getMessage());
         }
     }
 

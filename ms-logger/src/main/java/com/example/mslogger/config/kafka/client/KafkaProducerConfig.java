@@ -7,9 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
-import org.springframework.kafka.support.serializer.JsonSerializer;
 
-import java.awt.datatransfer.StringSelection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,7 +18,7 @@ public class KafkaProducerConfig {
     private String bootstrapServers;
 
     @Bean
-    public <K, V> ProducerFactory<K, V> createOrderProducerFactory(){
+    public <K, V> ProducerFactory<K, V> createLogsProducerFactory(){
         Map<String,Object> config = new HashMap<>();
         config.put(org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         config.put(org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -30,6 +28,6 @@ public class KafkaProducerConfig {
 
     @Bean
     public <K, V> KafkaTemplate<K, V> createOrderKafkaTemplate(){
-        return new KafkaTemplate<>(createOrderProducerFactory());
+        return new KafkaTemplate<>(createLogsProducerFactory());
     }
 }

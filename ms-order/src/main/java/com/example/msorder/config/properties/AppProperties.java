@@ -18,7 +18,7 @@ public class AppProperties {
     private boolean PUBLISH_LOG_KAFKA = true;
 
     // MessageDto
-    private String SERVICELOG_KAFKA_TOPIC = "servicelog";
+    private String SERVICELOG_KAFKA_TOPIC = "ms-event-log";
     private String SERVICELOG_KAFKA_GROUP_ID = "service_log";
 
     private String SECRET_KEY = "bXlvbmx5X3Bhc3N3b3JkOg==";

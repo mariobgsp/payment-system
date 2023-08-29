@@ -2,7 +2,7 @@ package com.example.msorder.utils;
 
 import java.util.UUID;
 
-import com.example.msorder.model.logs.Logs;
+import com.example.msorder.model.logs.ServiceLog;
 import com.example.msorder.model.rqrs.request.RequestInfo;
 import com.example.msorder.model.rqrs.response.ResponseInfo;
 
@@ -11,25 +11,25 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LogsUtils {
 
-    public static Logs construcInsertLogs(RequestInfo requestInfo, ResponseInfo<Object> responseInfo) {
-        Logs logs = new Logs();
+    public static ServiceLog construcInsertLogs(RequestInfo requestInfo, ResponseInfo<Object> responseInfo) {
+        ServiceLog serviceLog = new ServiceLog();
 
         try {
-            logs.setId(UUID.randomUUID().toString());
-            logs.setAppName(requestInfo.getAppName());
-            logs.setChannel(requestInfo.getChannel());
-            logs.setCompletionStatus(responseInfo.getBody().getStatus());
-            logs.setCorrelationId(requestInfo.getCorrelationId());
-            logs.setHttpStatusCode(responseInfo.getHttpStatus().value());
-            logs.setOperationName(requestInfo.getOpName());
+            serviceLog.setId(UUID.randomUUID().toString());
+            serviceLog.setAppName(requestInfo.getAppName());
+            serviceLog.setChannel(requestInfo.getChannel());
+            serviceLog.setCompletionStatus(responseInfo.getBody().getStatus());
+            serviceLog.setCorrelationId(requestInfo.getCorrelationId());
+            serviceLog.setHttpStatusCode(responseInfo.getHttpStatus().value());
+            serviceLog.setOperationName(requestInfo.getOpName());
 
-            logs.setRequestAt(CommonUtils.convertToDate(requestInfo.getRequestAt()));
-            logs.setRequestId(requestInfo.getRequestId());
-            logs.setRequestPayload(CommonUtils.gson.toJson(requestInfo.getRequestData()));
-            logs.setResponsePayload(CommonUtils.gson.toJson(responseInfo.getBody()));
+            serviceLog.setRequestAt(CommonUtils.convertToDate(requestInfo.getRequestAt()));
+            serviceLog.setRequestId(requestInfo.getRequestId());
+            serviceLog.setRequestPayload(requestInfo.getRequestData());
+            serviceLog.setResponsePayload(responseInfo.getBody());
 
             if (requestInfo.getHttpServletRequest() != null) {
-                logs.setUri(requestInfo.getHttpServletRequest().getRequestURI())
+                serviceLog.setUri(requestInfo.getHttpServletRequest().getRequestURI())
                         .setMethod(requestInfo.getHttpServletRequest().getMethod())
                         .setHost(requestInfo.getHttpServletRequest().getRemoteHost())
                         .setQueryParam(requestInfo.getHttpServletRequest().getQueryString());
@@ -38,7 +38,7 @@ public class LogsUtils {
             log.error("Failed parse payload {}", e.getMessage());
         }
 
-        return logs;
+        return serviceLog;
     }
 
 }

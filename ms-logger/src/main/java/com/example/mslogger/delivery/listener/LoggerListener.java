@@ -1,17 +1,13 @@
 package com.example.mslogger.delivery.listener;
 
-import java.io.IOException;
-
-import com.example.mslogger.model.kafka.MessageDto;
-import org.apache.kafka.common.protocol.types.Field;
+import com.example.mslogger.config.variable.ApplicationConstant;
+import com.example.mslogger.model.repository.ServiceLog;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
-import com.example.mslogger.model.repository.Logs;
 import com.example.mslogger.repository.MongoRepository;
 import com.example.mslogger.utils.CommonUtils;
 
@@ -24,15 +20,20 @@ public class LoggerListener {
     @Autowired
     private MongoRepository mongoRepository;
 
-    @KafkaListener(topics = "servicelogs", containerFactory="LogsContainerFactory")
-    public void logsListener(@Payload String messageDto, Acknowledgment ack) {
-        log.info("logger service received order {} ", messageDto);
+    @KafkaListener(topics = ApplicationConstant.LOGGER_TOPIC, containerFactory=ApplicationConstant.BEAN_LOG_CONTAINER_FACTORY)
+    public void logsListener(@Payload String message, Acknowledgment ack) {
+        log.info("logger event received, message: {} ", message);
         ack.acknowledge();
 
         // process
-        MessageDto messageDt = CommonUtils.gson.fromJson(messageDto, MessageDto.class);
-        Logs logs = CommonUtils.gson.fromJson(messageDt.getMessage(), Logs.class);
-        mongoRepository.insertToMongodb(logs);
+        ServiceLog serviceLog = CommonUtils.gson.fromJson(message, ServiceLog.class);
+        log.info("detail event, appName: {} ", serviceLog.getAppName());
+        log.info("detail event, operationName: {} ", serviceLog.getOperationName());
+        log.info("detail event, requestId: {} ", serviceLog.getRequestId());
+        log.info("detail event, requestAt: {} ", serviceLog.getRequestAt());
+        log.info("detail event, completionStatus: {} ", serviceLog.getCompletionStatus());
+        log.info("insert log into mongodb ....");
+        mongoRepository.insertToMongodb(serviceLog);
     }
     
 }

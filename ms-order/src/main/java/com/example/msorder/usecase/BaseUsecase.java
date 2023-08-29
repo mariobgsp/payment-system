@@ -1,11 +1,10 @@
 package com.example.msorder.usecase;
 
-import com.example.msorder.model.kafka.MessageDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.example.msorder.config.properties.AppProperties;
-import com.example.msorder.model.logs.Logs;
+import com.example.msorder.model.logs.ServiceLog;
 import com.example.msorder.model.rqrs.request.RequestInfo;
 import com.example.msorder.model.rqrs.response.ResponseInfo;
 import com.example.msorder.service.KafkaServices;
@@ -27,10 +26,10 @@ public class BaseUsecase {
 
         // construct logs
         try{
-            Logs logs = LogsUtils.construcInsertLogs(requestInfo, responseInfo);
+            ServiceLog serviceLog = LogsUtils.construcInsertLogs(requestInfo, responseInfo);
             log.info("Publish log {}", appProperties.isPUBLISH_LOG_KAFKA());
             if(appProperties.isPUBLISH_LOG_KAFKA()){
-                kafkaServices.publish(CommonUtils.gson.toJson(new MessageDto(CommonUtils.gson.toJson(logs), "servicelogs")));
+                kafkaServices.publish(CommonUtils.gson.toJson(serviceLog));
             }
         }catch (Exception e){
             log.error("{}",e.getMessage());
