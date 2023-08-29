@@ -1,5 +1,6 @@
 package com.example.msorder.usecase;
 
+import com.example.msorder.model.kafka.MessageDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -24,13 +25,16 @@ public class BaseUsecase {
 
     public void publish(RequestInfo requestInfo, ResponseInfo<Object> responseInfo){
 
-        // construct logs 
-        Logs logs = LogsUtils.construcInsertLogs(requestInfo, responseInfo);
-        log.info("Publish log {}", appProperties.isPUBLISH_LOG_KAFKA());
-        if(appProperties.isPUBLISH_LOG_KAFKA()){
-            kafkaServices.sendMessage(CommonUtils.gson.toJson(logs));
+        // construct logs
+        try{
+            Logs logs = LogsUtils.construcInsertLogs(requestInfo, responseInfo);
+            log.info("Publish log {}", appProperties.isPUBLISH_LOG_KAFKA());
+            if(appProperties.isPUBLISH_LOG_KAFKA()){
+                kafkaServices.publish(CommonUtils.gson.toJson(new MessageDto(CommonUtils.gson.toJson(logs), "servicelogs")));
+            }
+        }catch (Exception e){
+            log.error("{}",e.getMessage());
         }
-
     }
 
 

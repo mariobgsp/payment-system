@@ -17,7 +17,7 @@ public class AppProperties {
 
     private boolean PUBLISH_LOG_KAFKA = true;
 
-    // kafka
+    // MessageDto
     private String SERVICELOG_KAFKA_TOPIC = "servicelog";
     private String SERVICELOG_KAFKA_GROUP_ID = "service_log";
 

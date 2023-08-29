@@ -2,6 +2,8 @@ package com.example.mslogger.delivery;
 
 import java.util.UUID;
 
+import com.example.mslogger.model.kafka.MessageDto;
+import com.example.mslogger.service.KafkaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,7 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.mslogger.model.repository.Logs;
 import com.example.mslogger.model.rqrs.request.RequestInfo;
 import com.example.mslogger.model.rqrs.response.ResponseInfo;
-import com.example.mslogger.service.KafkaServices;
 import com.example.mslogger.utils.CommonUtils;
 import com.example.mslogger.utils.LogsUtils;
 import com.example.mslogger.utils.ResponseUtils;
@@ -25,8 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 public class LoggerController {
 
     @Autowired
-    private KafkaServices loggerPublisher;
-
+    private KafkaService loggerPublisher;
 
     @PostMapping("/v0/publish")
     public ResponseEntity<?> publishLogs(HttpServletRequest httpServletRequest){
@@ -42,9 +42,9 @@ public class LoggerController {
 
         // publish to topic
         try{
-            loggerPublisher.sendMessage(CommonUtils.gson.toJson(insertLogs));
+            loggerPublisher.publish(CommonUtils.gson.toJson(new MessageDto(CommonUtils.gson.toJson(insertLogs), "servicelogs")));
         }catch(Exception e){
-            log.error("error publish message", e.getMessage());
+            log.error("error publish message {}", e.getMessage());
         }
 
         return new ResponseEntity<>(response.getBody(), response.getHttpHeaders(), response.getHttpStatus());

@@ -25,8 +25,8 @@ public class LogsUtils {
 
             logs.setRequestAt(CommonUtils.convertToDate(requestInfo.getRequestAt()));
             logs.setRequestId(requestInfo.getRequestId());
-            logs.setRequestPayload(requestInfo.getRequestData());
-            logs.setResponsePayload(responseInfo.getBody());
+            logs.setRequestPayload(CommonUtils.gson.toJson(requestInfo.getRequestData()));
+            logs.setResponsePayload(CommonUtils.gson.toJson(responseInfo.getBody()));
 
             if (requestInfo.getHttpServletRequest() != null) {
                 logs.setUri(requestInfo.getHttpServletRequest().getRequestURI())
