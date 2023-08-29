@@ -5,6 +5,7 @@ import com.example.mslogger.model.rqrs.request.RequestInfo;
 import com.google.gson.Gson;
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
@@ -35,5 +36,13 @@ public class CommonUtils {
         formatter.setTimeZone(tz);
         return formatter.format(date);
     }
+
+    public static Date convertToDate(String sdate) throws ParseException {
+        SimpleDateFormat formatter = new SimpleDateFormat(ApplicationConstant.DATE_TIME_FORMAT);
+        Date date = formatter.parse(sdate);
+
+        return date;
+    }
+
 
 }

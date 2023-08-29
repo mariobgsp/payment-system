@@ -16,6 +16,6 @@ public class AppProperties {
     private String APPLICATION_NAME = "ms-logger";
 
     // kafka
-    private String SERVICELOG_KAFKA_TOPIC = "servicelog";
-    private String SERVICELOG_KAFKA_GROUP_ID = "service_log";
+    private String SERVICELOG_KAFKA_TOPIC = "ms-event-log";
+    private String SERVICELOG_KAFKA_GROUPID = "event-service-log-group";
 }

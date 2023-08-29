@@ -1,5 +1,6 @@
 package com.example.mslogger.config.mongo;
 
+import com.example.mslogger.config.variable.ApplicationConstant;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 
@@ -17,12 +18,12 @@ public class MongoConfig {
     @Value("${spring.data.mongodb.database}")
     private String mongoDatabaseName;
 
-    @Bean(name = "mongo-client")
+    @Bean(ApplicationConstant.BEAN_MONGO_CLIENT)
     public MongoClient mongoClient() {
         return MongoClients.create(this.mongoConnectionString);
     }
 
-    @Bean(name = "mongo-template")
+    @Bean(ApplicationConstant.BEAN_MONGO_TEMPLATE)
     public MongoTemplate MongoTemplate() {
         return new MongoTemplate(mongoClient(), this.mongoDatabaseName);
     }
