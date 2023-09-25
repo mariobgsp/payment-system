@@ -12,8 +12,8 @@ services:
       mode: replicated
       replicas: 1
     environment:
-      - POSTGRES_MULTIPLE_DATABASES=ms,transaction,log
-      - POSTGRES_USER=postgres
+      - POSTGRES_MULTIPLE_DATABASES=ms,transaction,log,partner
+      - POSTGRES_USER=microservices
       - POSTGRES_PASSWORD=password
     volumes:
       - ./db-data/postgres/:/var/lib/postgresql/data/
@@ -82,7 +82,7 @@ services:
       - "8080:8080"
     depends_on:
       - postgres
-  
+
   ms-logger:
     container_name: ms-logger
     build: 
@@ -100,3 +100,31 @@ services:
     depends_on:
       - mongo
       - kafka
+
+  ms-payment:
+    container_name: ms-payment
+    build: 
+      context: ./../ms-payment
+      dockerfile: ./ms-payment.dockerfile
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
+    ports:
+      - "9090:9090"
+    depends_on:
+      - postgres
+
+  ms-paymentagr:
+    container_name: ms-paymentagr
+    build: 
+      context: ./../ms-paymentagr
+      dockerfile: ./ms-paymentagr.dockerfile
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    ports:
+      - "1234:1234"

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS store.store_user
 
 --store.user_product
 -- pass: b2xrasd_klhomme0
+-- pass: rebajea_ewhicher1
 insert into store.store_user (id, userid, username, firstname, lastname, email, password, specialproduct, recurring, token) values (1, 'b2xrasd', 'klhomme0', 'Kimbra', 'L''Homme', 'klhomme0@scribd.com', 'mO6Wb9gyUkMw1NohBtH8SKQSj21cBqj/h0666A5dKqQ=', true, true, '27c8cf05-8354-4b65-89b1-f8b82a615341');
 -- pass:
 insert into store.store_user (id, userid, username, firstname, lastname, email, password, specialproduct, recurring, token) values (2, 'rebajea', 'ewhicher1', 'Elora', 'Whicher', 'ewhicher1@gov.uk', 'E40k4bmmx1Ke9wGbNZmyOSPeX+vwvazYPKw/WrJpN8k=', false, false, '4d89ff31-a9c7-4e97-aa1d-484145ec34a2');

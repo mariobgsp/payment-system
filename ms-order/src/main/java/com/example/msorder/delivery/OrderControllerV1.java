@@ -34,7 +34,7 @@ public class OrderControllerV1 {
 
     @GetMapping("/v1/view/product")
     public ResponseEntity<?> viewProduct(
-            @RequestParam(value="user_name",required = false) String userName,
+            @RequestParam(value="username",required = true) String userName,
             @RequestHeader(value="x-request-channel") String channel,
             @RequestHeader(value="x-request-id") String requestId,
             HttpServletRequest httpServletRequest){
@@ -48,7 +48,7 @@ public class OrderControllerV1 {
 
     @PostMapping("/v1/order/product")
     public ResponseEntity<?> orderProduct(
-            @RequestParam(value="user_name", required = false) String username,
+            @RequestParam(value="username", required = true) String username,
             @RequestHeader(value="x-request-channel") String channel,
             @RequestHeader(value="x-request-id") String requestId,
             @RequestBody OrderRq bodyRq,
@@ -66,7 +66,7 @@ public class OrderControllerV1 {
     @GetMapping("/v1/order/{transactionid}/check")
     public ResponseEntity<?> getOrderStatus(
             @PathVariable("transactionid") String transactionId,
-            @RequestParam(value="user_name", required = false) String username,
+            @RequestParam(value="username", required = true) String username,
             @RequestHeader(value="x-request-channel") String channel,
             @RequestHeader(value="x-request-id") String requestId,
             HttpServletRequest httpServletRequest

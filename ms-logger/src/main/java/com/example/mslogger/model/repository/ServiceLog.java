@@ -1,5 +1,7 @@
 package com.example.mslogger.model.repository;
 
+import com.example.mslogger.config.variable.ApplicationConstant;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.gson.annotations.SerializedName;
@@ -44,6 +46,7 @@ public class ServiceLog {
 
     @JsonProperty("requestAt")
     @SerializedName("requestAt")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = ApplicationConstant.DATE_TIME_FORMAT)
     private Date requestAt;
 
     @JsonProperty("requestId")
