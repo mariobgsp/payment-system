@@ -17,7 +17,7 @@ public class PaymentController {
     @Autowired
     private PaymentUsecase paymentUsecase;
 
-    @PostMapping("/v1/post-create-payment/{type}")
+    @PostMapping("/v1/payment/create/{type}")
     public ResponseEntity<?> createPayment(@PathVariable("type") String paymentType,
                                            @RequestParam(value="transaction_id", required = true) String transactionId,
                                            @RequestParam(value="username") String userName,
@@ -26,7 +26,7 @@ public class PaymentController {
                                            @RequestBody CreatePaymentRq bodyRq,
                                            HttpServletRequest httpServletRequest){
         // construct request info
-        RequestInfo request = CommonUtils.constructRequestInfo(channel, "get-all-product", requestId, userName, httpServletRequest);
+        RequestInfo request = CommonUtils.constructRequestInfo(channel, "post-create-payment", requestId, userName, httpServletRequest);
         ResponseInfo<Object> response = paymentUsecase.createPayment(request, paymentType, transactionId, bodyRq);
         return new ResponseEntity<>(response.getBody(), response.getHttpHeaders(), response.getHttpStatus());
     }

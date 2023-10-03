@@ -69,6 +69,27 @@ public class ResponseUtils {
         return responseInfo;
     }
 
+
+    public static ResponseInfo<Object> generateDefaultAsyncRs(RequestInfo requestInfo) {
+        ResponseInfo<Object> responseInfo = new ResponseInfo<>();
+
+        Response<Object> response = new Response<>();
+        response.setCode("00");
+        response.setStatus("accepted");
+        response.setMessage("Request being processed");
+        response.setData(null);
+
+        responseInfo.setHttpStatus(HttpStatus.ACCEPTED);
+        HttpHeaders httpHeaders = new HttpHeaders();
+        httpHeaders.add("x-request-id", requestInfo.getRequestId());
+        httpHeaders.add("x-channel-id", requestInfo.getChannel());
+        httpHeaders.add("x-request-at", String.valueOf(requestInfo.getRequestAt()));
+        responseInfo.setHttpHeaders(httpHeaders);
+        responseInfo.setBody(response);
+
+        return responseInfo;
+    }
+
     public static ResponseInfo<Object> generateException(RequestInfo requestInfo, CommonException e){
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
         Response<Object> response = new Response<>();

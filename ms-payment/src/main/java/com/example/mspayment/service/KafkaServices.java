@@ -25,4 +25,10 @@ public class KafkaServices {
         log.info("Success sent log-event via Kafka, message: {}", message);
         log.info("{}",sendResult.toString());
     }
+
+    public void publishPayment(String topic, String message) throws ExecutionException, InterruptedException {
+        SendResult<String, String> sendResult = createOrderKafkaTemplate.send(topic , message).get();
+        log.info("Success sent kafka-event via Kafka, topic {}, message: {}", topic, message);
+        log.info("{}",sendResult.toString());
+    }
 }

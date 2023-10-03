@@ -25,6 +25,9 @@ public class AppProperties {
     private String ORDER_STATUS_READY = "READY";
     private String PAYMENT_STATUS_READY = "READY";
 
+    private String ORDER_STATUS_PUBLISHED = "SUCCESS";
+    private String PAYMENT_STATUS_SUCCESS = "SUCCESS";
+
     // payment service
     private String PAYMENT_CURRENCY = "IDR";
     private String PAYMENT_CHECKOUT_METHOD = "ONE_TIME_PAYMENT";

@@ -25,7 +25,7 @@ func ChargePayment(rq *models.ChargeRq) (rs *models.ChargeRs, err error) {
 
 	// set action
 	act := new(models.Action)
-	act.CheckoutUrl = strings.ReplaceAll("http://localhost:1234/payments/redirect/{refid}", "{refid}", rq.ReferenceId)
+	act.CheckoutUrl = strings.ReplaceAll("http://127.0.0.1:1234/payments/redirect/{refid}", "{refid}", rq.ReferenceId)
 
 	// set channelproperties
 	cp := new(models.ChannelProperties)
@@ -85,7 +85,7 @@ func TriggerCallback(trxid string) {
 		SetHeader("Content-Type", "application/json").
 		SetBody(bodyPayload).
 		SetResult(sRs).
-		Post("http://localhost:9090/notify")
+		Post("http://127.0.0.1:9090/ms/api/v1/payment/notify")
 	if err != nil {
 		log.Print("failed invoke partner", res, err)
 		return
