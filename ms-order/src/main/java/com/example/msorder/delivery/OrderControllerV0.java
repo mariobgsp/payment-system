@@ -19,7 +19,7 @@ public class OrderControllerV0 {
 
     @GetMapping("/v0/get-all-product")
     public ResponseEntity<?> getAllProduct(
-            @RequestParam(value="user_name",required = false) String userName,
+            @RequestParam(value="username",required = false) String userName,
             @RequestHeader(value="x-request-channel") String channel,
             @RequestHeader(value="x-request-id") String requestId,
             HttpServletRequest httpServletRequest){
@@ -31,7 +31,7 @@ public class OrderControllerV0 {
 
     @GetMapping("/v0/get-available-product")
     public ResponseEntity<?> getAvailableProduct(
-            @RequestParam(value="user_name",required = false) String userName,
+            @RequestParam(value="username",required = false) String userName,
             @RequestHeader(value="x-request-channel") String channel,
             @RequestHeader(value="x-request-id") String requestId,
             HttpServletRequest httpServletRequest){

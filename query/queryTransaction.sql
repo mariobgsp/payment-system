@@ -2,6 +2,7 @@ SELECT * FROM transaction.product_trx order by sys_creation_date desc;
 
 DROP TABLE transaction.product_trx;
 
+CREATE SCHEMA IF NOT EXISTS transaction;
 CREATE TABLE IF NOT EXISTS transaction.product_trx
 (
     id character varying(100) COLLATE pg_catalog."default",
