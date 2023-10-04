@@ -27,6 +27,24 @@ type ChargeRs struct {
 	Internal          *AdditionalResponse `json:"-"`
 }
 
+type RefundRq struct {
+	ReferenceId string `json:"reference_id"`
+	Amount      int    `json:"amount"`
+	Reason      string `json:"reason"`
+	Currency    string `json:"currency"`
+}
+
+type RefundRs struct {
+	Id           string    `json:"id"`
+	ReferenceId  string    `json:"reference_id"`
+	Amount       int       `json:"amount"`
+	Reason       string    `json:"reason"`
+	Currency     string    `json:"currency"`
+	RefundStatus string    `json:"refund_status"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type AdditionalResponse struct {
 	HttpStatusCode   int    `json:"-"`
 	OriginalError    error  `json:"-"`

@@ -2,6 +2,8 @@ package com.example.mspayment.service;
 
 import com.example.mspayment.config.properties.AppProperties;
 import com.example.mspayment.exception.definition.PaymentException;
+import com.example.mspayment.model.mspayment.PaymentRefundRq;
+import com.example.mspayment.model.mspayment.PaymentRefundRs;
 import com.example.mspayment.model.mspayment.PaymentRq;
 import com.example.mspayment.model.mspayment.PaymentRs;
 import com.example.mspayment.model.rqrs.request.RequestInfo;
@@ -38,6 +40,8 @@ public class PaymentService {
         RestTemplate restTemplate = new RestTemplate();
         Map<String,Object> map = new HashMap<>();
 
+        log.info("[URL: {}]", url);
+        log.info("[Request: {}]", CommonUtils.gson.toJson(paymentRq));
         ResponseEntity<String> response = restTemplate.exchange(
                 url,
                 HttpMethod.POST,
@@ -47,7 +51,7 @@ public class PaymentService {
             throw new PaymentException(HttpStatus.INTERNAL_SERVER_ERROR, "99", "failed to invoke");
         }else{
             if(response.getStatusCode().is2xxSuccessful()){
-                log.info("{}",response.getBody());
+                log.info("[Response: {}]",response.getBody());
                 paymentRs = CommonUtils.gson.fromJson(response.getBody(), PaymentRs.class);
             }else{
                 throw new PaymentException(HttpStatus.INTERNAL_SERVER_ERROR, "99", "failed to invoke");
@@ -55,6 +59,33 @@ public class PaymentService {
         }
 
         return paymentRs;
+    }
+
+    public PaymentRefundRs paymentRefund(RequestInfo requestInfo, PaymentRefundRq refundRq) throws Exception {
+        PaymentRefundRs paymentRefundRs = new PaymentRefundRs();
+        String url = appProperties.getPAYMENT_REFUND_URL();
+        RestTemplate restTemplate = new RestTemplate();
+        Map<String,Object> map = new HashMap<>();
+        log.info("[URL: {}]", url);
+        log.info("[Request: {}]", CommonUtils.gson.toJson(refundRq));
+        ResponseEntity<String> response = restTemplate.exchange(
+                url,
+                HttpMethod.POST,
+                new HttpEntity<>(refundRq,getHttpHeaders(requestInfo)), String.class);
+        log.info("[Response: {}]", response);
+        if(response.getBody()==null){
+            log.error("[couldn't do payment charge]]");
+            throw new PaymentException(HttpStatus.INTERNAL_SERVER_ERROR, "99", "failed to invoke");
+        }else{
+            if(response.getStatusCode().is2xxSuccessful()){
+                log.info("{}",response.getBody());
+                paymentRefundRs = CommonUtils.gson.fromJson(response.getBody(), PaymentRefundRs.class);
+            }else{
+                throw new PaymentException(HttpStatus.INTERNAL_SERVER_ERROR, "99", "failed to invoke");
+            }
+        }
+
+        return paymentRefundRs;
     }
 
 

@@ -4,13 +4,12 @@ import com.example.mspayment.config.properties.AppProperties;
 import com.example.mspayment.exception.definition.BadRequestException;
 import com.example.mspayment.exception.definition.CommonException;
 import com.example.mspayment.exception.definition.TrxNotFoundException;
+import com.example.mspayment.model.mspayment.PaymentRefundRq;
+import com.example.mspayment.model.mspayment.PaymentRefundRs;
 import com.example.mspayment.model.mspayment.PaymentRq;
 import com.example.mspayment.model.mspayment.PaymentRs;
 import com.example.mspayment.model.repository.ProductTrx;
-import com.example.mspayment.model.rqrs.request.CallbackRq;
-import com.example.mspayment.model.rqrs.request.CreatePaymentRq;
-import com.example.mspayment.model.rqrs.request.KafkaMessageRq;
-import com.example.mspayment.model.rqrs.request.RequestInfo;
+import com.example.mspayment.model.rqrs.request.*;
 import com.example.mspayment.model.rqrs.response.CreatePaymentRs;
 import com.example.mspayment.model.rqrs.response.ResponseInfo;
 import com.example.mspayment.repository.TransactionRepository;
@@ -38,7 +37,7 @@ public class PaymentUsecase extends BaseUsecase{
     private KafkaServices kafkaServices;
 
     public ResponseInfo<Object> createPayment(RequestInfo requestInfo, String paymentType, String transactionId, CreatePaymentRq bodyRq){
-        log.info("[{} - viewProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
+        log.info("[{} - createPayment][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try{
@@ -80,7 +79,41 @@ public class PaymentUsecase extends BaseUsecase{
         return responseInfo;
     }
 
+    public void refundPayment(RequestInfo requestInfo, RefundRq refundRq) {
+        log.info("[{} - refundPayment][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
+
+        ResponseInfo<Object> responseInfo = new ResponseInfo<>();
+        try{
+            // find trx in product_trx
+            List<ProductTrx> productTrxList = transactionRepository.findProductTrx(refundRq.getTransactionId());
+            if (productTrxList.isEmpty()){
+                throw new TrxNotFoundException("01", "transaction not found");
+            }
+
+            // invoke payment service
+            PaymentRefundRq paymentRefundRq = new PaymentRefundRq()
+                    .setReferenceId(productTrxList.get(0).getTransactionId())
+                    .setCurrency(appProperties.getPAYMENT_CURRENCY())
+                    .setReason("Request Refund")
+                    .setAmount(productTrxList.get(0).getPriceCharge());
+
+            PaymentRefundRs paymentRefundRs = paymentService.paymentRefund(requestInfo, paymentRefundRq);
+
+            // update in multipayment trx
+            transactionRepository.updateProductTrx(refundRq.getTransactionId() , productTrxList.get(0).getPaymentStatus() , appProperties.getPAYMENT_STATUS_REFUND());
+
+            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, paymentRefundRs);
+        }catch (Exception e){
+            log.error("[{} - createPayment][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
+            CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
+            responseInfo = ResponseUtils.generateException(requestInfo, ex);
+        }
+        super.publish(requestInfo, responseInfo);
+    }
+
+
     public void notifyPayment(RequestInfo requestInfo, CallbackRq bodyRq){
+        log.info("[{} - notifyPayment][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
 
         try {
@@ -90,32 +123,33 @@ public class PaymentUsecase extends BaseUsecase{
                 throw new TrxNotFoundException("01", "transaction not found");
             }
 
-            // amount == price charge
-//            if (bodyRq.getAmount()!=productTrxList.get(0).getPriceCharge()){
-//                throw new BadRequestException("02", "amount/price charge mismatch");
-//            }
-            // update in multipayment trx
-            transactionRepository.updateProductTrx(bodyRq.getReferenceId() , appProperties.getORDER_STATUS_PUBLISHED() , appProperties.getPAYMENT_STATUS_SUCCESS());
+            if(bodyRq.getStatus().equals(appProperties.getPAYMENT_SUCCEEDED())){
+                // update in multipayment trx
+                transactionRepository.updateProductTrx(bodyRq.getReferenceId() , appProperties.getORDER_STATUS_PUBLISHED() , appProperties.getPAYMENT_STATUS_SUCCESS());
 
-            // construct kafka message
-            KafkaMessageRq kafkaMessageRq = new KafkaMessageRq();
-            productTrxList = transactionRepository.findProductTrx(bodyRq.getReferenceId());
+                // construct kafka message
+                KafkaMessageRq kafkaMessageRq = new KafkaMessageRq();
+                productTrxList = transactionRepository.findProductTrx(bodyRq.getReferenceId());
 
-            kafkaMessageRq.setId(productTrxList.get(0).getId())
-                    .setSysCreationDate(productTrxList.get(0).getSysCreationDate())
-                    .setTransactionId(productTrxList.get(0).getTransactionId())
-                    .setOrderStatus(productTrxList.get(0).getOrderStatus())
-                    .setPaymentStatus(productTrxList.get(0).getPaymentStatus())
-                    .setUserId(productTrxList.get(0).getUserId())
-                    .setProductName(productTrxList.get(0).getProductName())
-                    .setAmount(productTrxList.get(0).getAmount())
-                    .setPrice(productTrxList.get(0).getPrice())
-                    .setPriceCharge(productTrxList.get(0).getPriceCharge())
-                    .setProductCode(productTrxList.get(0).getProductCode())
-                    .setSysUpdateDate(productTrxList.get(0).getSysUpdateDate());
-            // publish kafka
-            kafkaServices.publishPayment("notify-payment", CommonUtils.gson.toJson(kafkaMessageRq));
-            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, kafkaMessageRq);
+                kafkaMessageRq.setId(productTrxList.get(0).getId())
+                        .setSysCreationDate(productTrxList.get(0).getSysCreationDate())
+                        .setTransactionId(productTrxList.get(0).getTransactionId())
+                        .setOrderStatus(productTrxList.get(0).getOrderStatus())
+                        .setPaymentStatus(productTrxList.get(0).getPaymentStatus())
+                        .setUserId(productTrxList.get(0).getUserId())
+                        .setProductName(productTrxList.get(0).getProductName())
+                        .setAmount(productTrxList.get(0).getAmount())
+                        .setPrice(productTrxList.get(0).getPrice())
+                        .setPriceCharge(productTrxList.get(0).getPriceCharge())
+                        .setProductCode(productTrxList.get(0).getProductCode())
+                        .setSysUpdateDate(productTrxList.get(0).getSysUpdateDate());
+                // publish kafka
+                kafkaServices.publishPayment("notify-payment", CommonUtils.gson.toJson(kafkaMessageRq));
+            }else {
+                log.info("Notify Payment received, trxid : {}, status {}", bodyRq.getReferenceId(), bodyRq.getStatus());
+            }
+
+            responseInfo = ResponseUtils.generateSuccessRs(requestInfo);
         }catch (Exception e){
             log.error("[{} - notifyPayment][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
@@ -125,7 +159,5 @@ public class PaymentUsecase extends BaseUsecase{
         // publish log
         super.publish(requestInfo, responseInfo);
     }
-
-
 
 }

@@ -25,13 +25,17 @@ public class AppProperties {
     private String ORDER_STATUS_READY = "READY";
     private String PAYMENT_STATUS_READY = "READY";
 
-    private String ORDER_STATUS_PUBLISHED = "SUCCESS";
+    private String ORDER_STATUS_PUBLISHED = "PUBLISHED";
     private String PAYMENT_STATUS_SUCCESS = "SUCCESS";
+    private String PAYMENT_STATUS_REFUND = "REFUND";
+
+    private String PAYMENT_SUCCEEDED = "SUCCEEDED";
 
     // payment service
     private String PAYMENT_CURRENCY = "IDR";
     private String PAYMENT_CHECKOUT_METHOD = "ONE_TIME_PAYMENT";
     private String PAYMENT_CHARGE_URL = "http://localhost:1234/payments/charge";
+    private String PAYMENT_REFUND_URL = "http://localhost:1234/payments/refund";
 
     // Query
     private String QUERY_SELECT_PRODUCT_TRX_BY_ID = "SELECT id, sys_creation_date, transactionid, orderstatus, paymentstatus, userid, productname, amount, price, pricecharge, productcode, param_1, param_2, sys_update_date, payment_date, discount_enabled, discount FROM transaction.product_trx where transactionid = ? ";

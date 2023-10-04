@@ -48,10 +48,27 @@ func ChargePayment(rq *models.ChargeRq) (rs *models.ChargeRs, err error) {
 	return res, nil
 }
 
+func RefundPayment(rq *models.RefundRq) (rs *models.RefundRs, err error) {
+	res := new(models.RefundRs)
+
+	res.Id = "pgr_" + uuid.New().String()
+	res.ReferenceId = rq.ReferenceId
+	res.Amount = rq.Amount
+	res.Reason = rq.Reason
+	res.RefundStatus = "PENDING"
+	res.Currency = rq.Currency
+	res.CreatedAt = time.Now()
+	res.UpdatedAt = time.Now()
+
+	go func() { TriggerCallback(rq.ReferenceId, "SUCCESSREFUND") }()
+
+	return res, nil
+}
+
 func RedirectPayment(trxid string) (rs *models.SimpleResponse, err error) {
 	res := new(models.SimpleResponse)
 
-	go func() { TriggerCallback(trxid) }()
+	go func() { TriggerCallback(trxid, "SUCCEEDED") }()
 
 	// main rs
 	res.Status = "Ok"
@@ -62,14 +79,14 @@ func RedirectPayment(trxid string) (rs *models.SimpleResponse, err error) {
 }
 
 // invoking partner
-func TriggerCallback(trxid string) {
+func TriggerCallback(trxid string, status string) {
 	res := new(models.CallbackRq)
 	sRs := new(models.SimpleResponse)
 
 	// callback request
 	res.Id = "pgr_" + uuid.New().String()
 	res.ReferenceId = trxid
-	res.Status = "SUCCEEDED"
+	res.Status = status
 	res.Updated = time.Now()
 
 	// init resty
