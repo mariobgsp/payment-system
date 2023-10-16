@@ -144,7 +144,7 @@ public class PaymentUsecase extends BaseUsecase{
                         .setProductCode(productTrxList.get(0).getProductCode())
                         .setSysUpdateDate(productTrxList.get(0).getSysUpdateDate());
                 // publish kafka
-                kafkaServices.publishPayment("notify-payment", CommonUtils.gson.toJson(kafkaMessageRq));
+                kafkaServices.publishPayment("ms-notify-payment", CommonUtils.gson.toJson(kafkaMessageRq));
             }else {
                 log.info("Notify Payment received, trxid : {}, status {}", bodyRq.getReferenceId(), bodyRq.getStatus());
             }

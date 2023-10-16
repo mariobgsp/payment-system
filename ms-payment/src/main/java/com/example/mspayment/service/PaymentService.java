@@ -8,16 +8,14 @@ import com.example.mspayment.model.mspayment.PaymentRq;
 import com.example.mspayment.model.mspayment.PaymentRs;
 import com.example.mspayment.model.rqrs.request.RequestInfo;
 import com.example.mspayment.utils.CommonUtils;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Service

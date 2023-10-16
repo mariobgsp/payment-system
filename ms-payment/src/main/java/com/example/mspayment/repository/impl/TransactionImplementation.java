@@ -38,8 +38,4 @@ public class TransactionImplementation implements TransactionRepository {
         jdbcTemplate.update(appProperties.getQUERY_UPDATE_PRODUCT_STATUS_TRX_BY_ID(), orderStatus, paymentStatus, transactionId);
     }
 
-    public void updateProductTrx(){
-
-    }
-
 }

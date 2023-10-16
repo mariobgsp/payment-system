@@ -1,7 +1,6 @@
 version: "3.7"
 
 services:
-
   postgres:
     container_name: postgres
     image: 'postgres:15-alpine3.17'
@@ -117,14 +116,15 @@ services:
     depends_on:
       - postgres
 
-  # ms-paymentagr:
-  #   container_name: ms-paymentagr
-  #   build: 
-  #     context: ./../ms-paymentagr
-  #     dockerfile: ./ms-paymentagr.dockerfile
-  #   restart: always
-  #   deploy:
-  #     mode: replicated
-  #     replicas: 1
-  #   ports:
-  #     - "1234:1234"
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - /path/to/local/data:/root/redis
+      - /path/to/local/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_PASSWORD=my-password
+      - REDIS_PORT=6379
+      - REDIS_DATABASES=0
