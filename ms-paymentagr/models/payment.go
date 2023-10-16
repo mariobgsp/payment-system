@@ -3,28 +3,29 @@ package models
 import "time"
 
 type ChargeRq struct {
-	ReferenceId       string            `json:"reference_id"`
-	Currency          string            `json:"currency"`
-	CheckoutMethod    string            `json:"checkout_method"`
-	Amount            int               `json:"amount"`
-	PaymentCode       string            `json:"payment_code"`
-	ChannelProperties ChannelProperties `json:"channel_properties"`
+	ReferenceId    string `json:"reference_id"`
+	Currency       string `json:"currency"`
+	CheckoutMethod string `json:"checkout_method"`
+	Amount         int    `json:"amount"`
+	PaymentCode    string `json:"payment_code"`
+	RedirectUrl    string `json:"redirect_url"`
+	CallbackUrl    string `json:"callback_url"`
 }
 
 type ChargeRs struct {
-	Id                string              `json:"id"`
-	Status            string              `json:"status"`
-	Currency          string              `json:"currency"`
-	CheckoutMethod    string              `json:"checkout_method"`
-	Amount            int                 `json:"amount"`
-	PaymentCode       string              `json:"payment_code"`
-	ReferenceId       string              `json:"reference_id"`
-	ChannelProperties *ChannelProperties  `json:"channel_properties"`
-	CallbackUrl       string              `json:"callback_url"`
-	Created           time.Time           `json:"created"`
-	Updated           time.Time           `json:"updated"`
-	Action            *Action             `json:"action"`
-	Internal          *AdditionalResponse `json:"-"`
+	Id             string              `json:"id"`
+	Status         string              `json:"status"`
+	Currency       string              `json:"currency"`
+	CheckoutMethod string              `json:"checkout_method"`
+	Amount         int                 `json:"amount"`
+	PaymentCode    string              `json:"payment_code"`
+	ReferenceId    string              `json:"reference_id"`
+	RedirectUrl    string              `json:"redirect_url"`
+	CallbackUrl    string              `json:"callback_url"`
+	Created        time.Time           `json:"created"`
+	Updated        time.Time           `json:"updated"`
+	Action         *Action             `json:"action"`
+	Internal       *AdditionalResponse `json:"-"`
 }
 
 type RefundRq struct {
@@ -56,29 +57,10 @@ type Action struct {
 	CheckoutUrl string `json:"checkout_url"`
 }
 
-type ChannelProperties struct {
-	SuccessRedirectUrl string `json:"success_redirect_url"`
-}
-
 type SimpleResponse struct {
 	Status   string              `json:"status"`
 	Code     string              `json:"code"`
 	Message  string              `json:"message"`
+	Data     interface{}         `json:"data,omitempty"`
 	Internal *AdditionalResponse `json:"-"`
-}
-
-type CallbackRq struct {
-	Id                string              `json:"id"`
-	Status            string              `json:"status"`
-	Currency          string              `json:"currency"`
-	CheckoutMethod    string              `json:"checkout_method"`
-	Amount            int                 `json:"amount"`
-	PaymentCode       string              `json:"payment_code"`
-	ReferenceId       string              `json:"reference_id"`
-	ChannelProperties *ChannelProperties  `json:"channel_properties"`
-	CallbackUrl       string              `json:"callback_url"`
-	Created           time.Time           `json:"created"`
-	Updated           time.Time           `json:"updated"`
-	Action            *Action             `json:"action"`
-	Internal          *AdditionalResponse `json:"-"`
 }
