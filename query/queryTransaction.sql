@@ -23,3 +23,10 @@ CREATE TABLE IF NOT EXISTS transaction.product_trx
     discount_enabled boolean,
     discount numeric(3,2)
 )
+
+CREATE SEQUENCE transaction.product_trx_seq
+    START WITH 1
+    INCREMENT BY 1
+    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 1;

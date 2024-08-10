@@ -13,5 +13,5 @@ func main() {
 	router.POST("payments/refund", delivery.RefundPayment)
 	router.GET("payments/redirect/:trxid", delivery.RedirectPayment)
 
-	router.Run("localhost:1234")
+	router.Run(":8081")
 }

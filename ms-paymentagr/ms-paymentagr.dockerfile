@@ -1,12 +1,20 @@
-FROM golang:1.20
+# Use the official Go image
+FROM golang:1.20 AS builder
 
-WORKDIR /usr/src/app
+# Set the Current Working Directory inside the container
+WORKDIR /app
 
-# pre-copy/cache go.mod for pre-downloading dependencies and only redownloading them in subsequent builds if they change
+# Copy go mod and sum files
 COPY go.mod go.sum ./
-RUN go mod download && go mod verify
 
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+RUN go mod download
+
+# Copy the source code into the container
 COPY . .
-RUN go build -v -o /usr/local/bin/app ./...
 
-CMD ["app"]
+# Build the Go app
+RUN go build -o main .
+
+# Start the app
+CMD ["./main"]
