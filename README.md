@@ -72,7 +72,7 @@ Once the containers are up and running, you can access the services:
 - **ms-invoice**: [http://localhost:8082](http://localhost:8082).
 
 Api Documentation:
-ms-order and ms-payment documentation: [API Documentation: payment-system](https://www.notion.so/mariobgsp/API-Documentation-payment-sistem-d422ba229b184210af6b865ec8991ffd?pvs=4) "API Documentation: payment-system")
+ms-order and ms-payment documentation: [API Documentation: payment-system](https://www.notion.so/mariobgsp/API-Documentation-payment-sistem-d422ba229b184210af6b865ec8991ffd?pvs=4 "API Documentation: payment-system")
 
 Check your `docker-compose.yml` file for the correct ports.
 
