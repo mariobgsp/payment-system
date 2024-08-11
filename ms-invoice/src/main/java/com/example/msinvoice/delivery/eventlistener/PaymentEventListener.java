@@ -21,7 +21,7 @@ public class PaymentEventListener {
     @Autowired
     private PaymentInvoiceUsecase paymentInvoiceUsecase;
 
-    @KafkaListener(topics = ApplicationConstant.PAYMENT_TOPIC, containerFactory=ApplicationConstant.BEAN_PAYMENT_EVENT_CONTAINER_FACTORY)
+    @KafkaListener(topics = "ms-notify-payment", containerFactory=ApplicationConstant.BEAN_PAYMENT_EVENT_CONTAINER_FACTORY)
     public void paymentListener(@Payload String message, Acknowledgment ack) {
         log.info("logger event received, message: {} ", message);
         ack.acknowledge();

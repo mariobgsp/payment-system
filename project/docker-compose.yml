@@ -127,6 +127,23 @@ services:
     depends_on:
       - postgres
 
+  ms-invoice:
+    container_name: ms-invoice
+    build: 
+      context: ./../ms-invoice
+      dockerfile: ./ms-invoice.dockerfile
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - kafka
+
   ms-paymentagr:
     container_name: ms-paymentagr
     build: 

@@ -18,6 +18,7 @@ public class AppProperties {
     // kafka
     private String PAYMENTEVENT_KAFKA_TOPIC = "ms-notify-payment";
     private String PAYMENTEVENT_KAFKA_GROUPID = "ms-notify-payment-group";
+
     private String SERVICELOG_KAFKA_TOPIC = "ms-event-log";
     private String SERVICELOG_KAFKA_GROUPID = "event-service-log-group";
 

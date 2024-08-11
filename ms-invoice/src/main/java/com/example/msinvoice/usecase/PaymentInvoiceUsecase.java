@@ -16,6 +16,7 @@ import net.sf.jasperreports.engine.xml.JRXmlLoader;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
@@ -30,6 +31,7 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
     private ProductTrxRepository productTrxRepository;
 
     public void process(RequestInfo requestInfo, String transactionId){
+        log.info("process payment notify {}", transactionId);
         ResponseInfo<Object> rs = new ResponseInfo<>();
 
         try{
@@ -39,10 +41,15 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
                 throw new TrxNotFoundException("01","transaction not found");
             }
             ProductTrx p = productTrx.get();
-            p.setPaymentDate(new Date());
+
 
             // generate document using jrxml
-            generatePaymentReport(transactionId, p.getPrice().doubleValue(), p.getProductName(), p.getPaymentDate());
+            log.info("generatePaymentReport... {}", transactionId);
+//            generatePaymentReport(transactionId, p.getPrice().doubleValue(), p.getProductName(), p.getPaymentDate());
+
+            p.setSysUpdateDate(new Date());
+            p.setOrderStatus("SUCCESS");
+            productTrxRepository.save(p);
 
             rs = ResponseUtils.generateSuccessRs(requestInfo);
         }catch (Exception e){
@@ -50,15 +57,16 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
             rs = ResponseUtils.generateException(requestInfo, ex);
         }
-
+        log.info("done process payment notify {}", transactionId);
         super.publish(requestInfo, rs);
     }
 
-    public static void generatePaymentReport(String transactionId, Double price, String productName, Date paymentDate) throws Exception {
+    public static void generatePaymentReport(String transactionId, Double price, String productName, Date paymentDate) {
         try {
             // Load the .jrxml file
-            String jrxmlPath = "src/main/resources/templates/payment_notes.jrxml";
-            JasperDesign jasperDesign = JRXmlLoader.load(jrxmlPath);
+            File file = new File("/app/resources/templates/payment_notes.jrxml");
+
+            JasperDesign jasperDesign = JRXmlLoader.load(file);
 
             // Compile the report
             JasperReport jasperReport = JasperCompileManager.compileReport(jasperDesign);
@@ -74,13 +82,13 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
             JasperPrint jasperPrint = JasperFillManager.fillReport(jasperReport, parameters, new JREmptyDataSource());
 
             // Export to PDF
-            String outputFile = "src/main/java/com/example/msinvoice/invoice/"+ transactionId + ".pdf";
+            log.info("exporting generatePaymentReport... {}", transactionId);
+            String outputFile = "/app/invoice/"+"invoice_"+ transactionId + ".pdf";
             JasperExportManager.exportReportToPdfFile(jasperPrint, outputFile);
 
             log.info("success generate report {}", outputFile);
         } catch (JRException e) {
-            log.error("error message {}", e.getMessage());
-            throw new Exception(e);
+            log.error("error generate report message {}", e.getMessage());
         }
     }
 
