@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="PaymentReceipt" pageWidth="226" pageHeight="360" columnWidth="186" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+    <property name="com.jaspersoft.studio.unit." value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.pageHeight" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.pageWidth" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.topMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.bottomMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.leftMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.rightMargin" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.columnWidth" value="pixel"/>
+    <property name="com.jaspersoft.studio.unit.columnSpacing" value="pixel"/>
+    <parameter name="transactionId" class="java.lang.String"/>
+    <parameter name="price" class="java.lang.String"/>
+    <parameter name="productName" class="java.lang.String"/>
+    <parameter name="paymentDate" class="java.lang.String"/>
+    <title>
+        <band height="50" splitType="Stretch">
+            <staticText>
+                <reportElement x="0" y="0" width="186" height="30"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="16" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Payment Receipt]]></text>
+            </staticText>
+        </band>
+    </title>
+    <detail>
+        <band height="170" splitType="Stretch">
+            <textField>
+                <reportElement x="0" y="10" width="186" height="20"/>
+                <textElement>
+                    <font size="10"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Transaction ID: " + $P{transactionId}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="0" y="30" width="186" height="20"/>
+                <textElement>
+                    <font size="10"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Payment Date: " + $P{paymentDate}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="0" y="50" width="186" height="20"/>
+                <textElement>
+                    <font size="10"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Product: " + $P{productName}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="0" y="70" width="186" height="20"/>
+                <textElement>
+                    <font size="10"/>
+                </textElement>
+                <textFieldExpression><![CDATA["Price: " + $P{price}]]></textFieldExpression>
+            </textField>
+            <staticText>
+                <reportElement x="0" y="120" width="186" height="30"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="10"/>
+                </textElement>
+                <text><![CDATA[Thank you for your purchase!]]></text>
+            </staticText>
+        </band>
+    </detail>
+</jasperReport>
