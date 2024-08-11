@@ -39,5 +39,5 @@ public class AppProperties {
 
     // Query
     private String QUERY_SELECT_PRODUCT_TRX_BY_ID = "SELECT id, sys_creation_date, transactionid, orderstatus, paymentstatus, userid, productname, amount, price, pricecharge, productcode, param_1, param_2, sys_update_date, payment_date, discount_enabled, discount FROM transaction.product_trx where transactionid = ? ";
-    private String QUERY_UPDATE_PRODUCT_STATUS_TRX_BY_ID = "UPDATE transaction.product_trx set paymentstatus = ?, orderstatus = ? , sys_update_date = localtimestamp where transactionid = ? ";
+    private String QUERY_UPDATE_PRODUCT_STATUS_TRX_BY_ID = "UPDATE transaction.product_trx set orderstatus = ?, paymentstatus = ? , sys_update_date = localtimestamp, payment_date = localtimestamp where transactionid = ? ";
 }
