@@ -14,7 +14,7 @@ import (
 	redisDriver "github.com/redis/go-redis/v9"
 )
 
-var host = "localhost:6379"
+var host = "redis:6379"
 var redisPassword = "my-password"
 
 func NewRedisClient(host string, password string) *redisDriver.Client {
@@ -76,7 +76,7 @@ func ChargePayment(rq *models.ChargeRq) (rs *models.ChargeRs, err error) {
 
 	// set action
 	act := new(models.Action)
-	act.CheckoutUrl = strings.ReplaceAll("http://127.0.0.1:1234/payments/redirect/{refid}", "{refid}", rq.ReferenceId)
+	act.CheckoutUrl = strings.ReplaceAll("http://127.0.0.1:8081/payments/redirect/{refid}", "{refid}", rq.ReferenceId)
 
 	// main rs
 	res.Id = "pgr_" + uuid.New().String()
@@ -214,7 +214,7 @@ func TriggerCallback(opKey string) {
 		SetHeader("Content-Type", "application/json").
 		SetBody(rqPayload).
 		SetResult(sRs).
-		Post("http://127.0.0.1:9090/ms/api/v1/payment/notify")
+		Post("http://ms-payment:9090/ms/api/v1/payment/notify")
 	if err != nil {
 		log.Print("failed invoke partner", res, err)
 		return

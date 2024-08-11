@@ -1,5 +1,3 @@
-version: "3.7"
-
 services:
   postgres:
     container_name: postgres
@@ -66,6 +64,19 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
 
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - /path/to/local/data:/root/redis
+      - /path/to/local/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_PASSWORD=my-password
+      - REDIS_PORT=6379
+      - REDIS_DATABASES=0
+
   ms-order:
     container_name: ms-order
     build: 
@@ -116,15 +127,33 @@ services:
     depends_on:
       - postgres
 
-  redis:
-    image: redis:latest
+  ms-invoice:
+    container_name: ms-invoice
+    build: 
+      context: ./../ms-invoice
+      dockerfile: ./ms-invoice.dockerfile
     restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - /path/to/local/data:/root/redis
-      - /path/to/local/redis.conf:/usr/local/etc/redis/redis.conf
+    deploy:
+      mode: replicated
+      replicas: 1
     environment:
-      - REDIS_PASSWORD=my-password
-      - REDIS_PORT=6379
-      - REDIS_DATABASES=0
+      - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - kafka
+
+  ms-paymentagr:
+    container_name: ms-paymentagr
+    build: 
+      context: ./../ms-paymentagr
+      dockerfile: ./ms-paymentagr.dockerfile
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
