@@ -28,7 +28,7 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
 
       - name: Build and run services with Docker Compose
-        run: docker-compose -f ./projects/docker-compose.yml up -d --build
+        run: docker-compose -f ./project/docker-compose.yml up -d --build
 
       - name: Wait for services to be ready
         run: sleep 30
@@ -40,4 +40,4 @@ jobs:
 
       - name: Stop Docker Compose services
         if: always()
-        run: docker-compose -f ./projects/docker-compose.yml down
+        run: docker-compose -f ./project/docker-compose.yml down
