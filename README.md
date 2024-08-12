@@ -22,7 +22,6 @@ Tech stack being use in this repository
 * [Sequence Diagram Design](https://github.com/mariobgsp/ms-java/blob/master/payment-system-sequence-diagram.png "Sequence Diagram Design")
 * [Payment System Diagram](payment-system-sequence-diagram "Payment System Diagram")
 
-## How To Start
 
 ## Getting Started
 
@@ -85,5 +84,7 @@ docker-compose down
 ```
 
 This command stops and removes all containers defined in the \`docker-compose.yml\` file.
+
+### 6. Build and Test Github Action already works (Optional)
 
 ### End of The Documentation
