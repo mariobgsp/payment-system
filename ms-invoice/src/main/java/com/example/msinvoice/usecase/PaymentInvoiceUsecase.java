@@ -42,7 +42,6 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
             }
             ProductTrx p = productTrx.get();
 
-
             // generate document using jrxml
             log.info("generatePaymentReport... {}", transactionId);
 //            generatePaymentReport(transactionId, p.getPrice().doubleValue(), p.getProductName(), p.getPaymentDate());
