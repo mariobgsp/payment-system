@@ -19,6 +19,9 @@ services:
   mongo:
     container_name: mongo
     image: 'mongo:4.2.16-bionic'
+    build:
+      context: ./../project/mongo
+      dockerfile: ./mongo.dockerfile
     ports:
       - "27017:27017"
     environment:
@@ -88,10 +91,11 @@ services:
       replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
-    ports:
-      - "8080:8080"
     depends_on:
       - postgres
+    ports:
+      - "8080:8080"
+    
 
   ms-logger:
     container_name: ms-logger
@@ -105,11 +109,12 @@ services:
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
       - SPRING_DATA_MONGODB_URI=mongodb://admin:password@mongo:27017
-    ports:
-      - "1337:1337"
     depends_on:
       - mongo
       - kafka
+    ports:
+      - "1337:1337"
+    
 
   ms-payment:
     container_name: ms-payment
@@ -122,10 +127,11 @@ services:
       replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
-    ports:
-      - "9090:9090"
     depends_on:
       - postgres
+    ports:
+      - "9090:9090"
+    
 
   ms-invoice:
     container_name: ms-invoice
@@ -138,11 +144,12 @@ services:
       replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
-    ports:
-      - "8082:8082"
     depends_on:
       - postgres
       - kafka
+    ports:
+      - "8082:8082"
+    
 
   ms-paymentagr:
     container_name: ms-paymentagr
@@ -153,7 +160,8 @@ services:
     deploy:
       mode: replicated
       replicas: 1
-    ports:
-      - "8081:8081"
     depends_on:
       - redis
+    ports:
+      - "8081:8081"
+    
