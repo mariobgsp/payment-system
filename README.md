@@ -1,6 +1,6 @@
 # payment-system
 
-## overview
+## Overview
 Repository that containing multiple microservices for payment system. This repository containing:
 * ms-logger microservices that handles log of any service action such as order, inquiry, and payment
 * ms-order microservices that handles product inquiry and order
@@ -8,7 +8,7 @@ Repository that containing multiple microservices for payment system. This repos
 * ms-paymentagr dummy microservice using golang and redis for payment (payment partner example)
 * ms-invoice provisions by generating document report
 
-## tech stack
+## Tech Stack
 Tech stack being use in this repository
 * Java Spring 17 - Main framework
 * Postgre SQL - JDBC Connectivity - Main Database
@@ -18,7 +18,7 @@ Tech stack being use in this repository
 * Go - As another language for microservices, used at ms-paymentagr
 * Redis - Temp database for Go Microservices
 
-## design
+## Design
 * [Sequence Diagram Design](https://github.com/mariobgsp/ms-java/blob/master/payment-system-sequence-diagram.png "Sequence Diagram Design")
 * [Payment System Diagram](payment-system-sequence-diagram "Payment System Diagram")
 
