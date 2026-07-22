@@ -26,7 +26,7 @@ public class KafkaConsumerConfig {
     @Autowired
     private AppProperties appProperties;
 
-    @Value("${spring.kafka.bootstrap-servers}")
+    @Value("${spring.kafka.bootstrap-servers:kafka:9092}")
     private String bootstrapServers;
 
     @Bean(ApplicationConstant.BEAN_LOG_CONSUMER_FACTORY)
