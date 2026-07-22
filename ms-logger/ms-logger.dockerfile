@@ -11,7 +11,7 @@ COPY src /app/src
 # Run the Maven build (clean install)
 RUN mvn clean install
 
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 
 WORKDIR /app
 
