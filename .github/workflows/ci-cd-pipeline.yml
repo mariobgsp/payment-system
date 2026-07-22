@@ -31,7 +31,7 @@ jobs:
         run: docker-compose -f ./project/docker-compose.yml up -d --build
 
       - name: Wait for services to be ready
-        run: sleep 30
+        run: sleep 90
 
       - name: Run tests
         run: |
