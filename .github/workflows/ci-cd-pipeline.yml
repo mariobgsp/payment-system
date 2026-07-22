@@ -46,3 +46,15 @@ jobs:
           done
           echo "ms-logger health check did not pass after 20 attempts"
           exit 1
+
+      - name: Capture service logs on failure
+        if: always()
+        run: |
+          echo "===== ms-logger logs ====="
+          docker-compose -f ./project/docker-compose.yml logs ms-logger || true
+          echo "===== ms-logger inspect (status/exit/error) ====="
+          docker inspect -f '{{.State.Status}} {{.State.ExitCode}} {{.State.Error}}' ms-logger || true
+          echo "===== kafka logs (tail) ====="
+          docker-compose -f ./project/docker-compose.yml logs --tail=30 kafka || true
+          echo "===== mongo logs (tail) ====="
+          docker-compose -f ./project/docker-compose.yml logs --tail=20 mongo || true
