@@ -12,7 +12,7 @@ COPY src /app/src
 RUN mvn clean install
 
 # Start with a clean base image for the runtime
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 
 # Install necessary libraries
 RUN apt-get update && \
