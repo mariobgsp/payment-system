@@ -35,9 +35,14 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "Checking ms-logger service..."
-          curl -f http://127.0.0.1:1337/ms/api/v1/health/check || exit 1
-
-      - name: Stop Docker Compose services
-        if: always()
-        run: docker-compose -f ./project/docker-compose.yml down
+          echo "Checking ms-logger service (with retry)..."
+          for i in $(seq 1 20); do
+            if curl -f -s http://127.0.0.1:1337/ms/api/v1/health/check; then
+              echo "\nms-logger health check OK (attempt $i)"
+              exit 0
+            fi
+            echo "  attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "ms-logger health check did not pass after 20 attempts"
+          exit 1
