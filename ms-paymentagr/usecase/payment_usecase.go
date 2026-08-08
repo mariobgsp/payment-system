@@ -2,11 +2,19 @@ package usecase
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"paymentagr/config"
 	"paymentagr/models"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -14,212 +22,218 @@ import (
 	redisDriver "github.com/redis/go-redis/v9"
 )
 
-var host = "redis:6379"
-var redisPassword = "my-password"
+var (
+	cfgOnce sync.Once
+	cfg     *config.Config
+	rdcOnce sync.Once
+	rdc     *redisDriver.Client
+)
 
-func NewRedisClient(host string, password string) *redisDriver.Client {
-	client := redisDriver.NewClient(&redisDriver.Options{
-		Addr:     host,
-		Password: password,
-		DB:       0,
+var referenceIdPattern = regexp.MustCompile(`^[A-Za-z0-9\-_.]{3,64}$`)
+
+func Config() *config.Config {
+	cfgOnce.Do(func() { cfg = config.Load() })
+	return cfg
+}
+
+func Redis() *redisDriver.Client {
+	rdcOnce.Do(func() {
+		rdc = redisDriver.NewClient(&redisDriver.Options{
+			Addr:     Config().RedisHost,
+			Password: Config().RedisPassword,
+			DB:       0,
+		})
 	})
-	return client
+	return rdc
 }
 
-func SetData(rdc *redisDriver.Client, key string, data interface{}, ttl time.Duration) error {
-	dataSet := rdc.Set(context.Background(), key, data, ttl)
-	return dataSet.Err()
+func SetData(key string, data interface{}, ttl time.Duration) error {
+	return Redis().Set(context.Background(), key, data, ttl).Err()
 }
 
-func GetData(rdc *redisDriver.Client, key string) (interface{}, error) {
-	dataGet := rdc.Get(context.Background(), key)
+func GetData(key string) (string, error) {
+	return Redis().Get(context.Background(), key).Result()
+}
 
-	if dataGet.Err() != nil {
-		fmt.Printf("Invalid Transaction : %v", dataGet.Err())
-		return "", dataGet.Err()
+func SignPayload(secret string, timestamp string, payload []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp))
+	mac.Write(payload)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func validateCharge(rq *models.ChargeRq) error {
+	if rq.ReferenceId == "" || !referenceIdPattern.MatchString(rq.ReferenceId) {
+		return errors.New("invalid or missing reference_id")
 	}
-	resp, err := dataGet.Result()
-	return resp, err
+	if rq.Amount <= 0 || rq.Amount > 1000000000 {
+		return errors.New("invalid amount, must be between 1 and 1000000000")
+	}
+	if rq.Currency == "" {
+		return errors.New("missing currency")
+	}
+	if rq.PaymentCode == "" {
+		return errors.New("missing payment_code")
+	}
+	if rq.CheckoutMethod == "" {
+		return errors.New("missing checkout_method")
+	}
+	return nil
 }
 
-func TestServices() (rs *models.SimpleResponse) {
-	res := new(models.SimpleResponse)
-
-	// get to redis - redisClient
-	rdc := NewRedisClient(host, redisPassword)
-
-	data, err := GetData(rdc, "chargetrx_AXISNETXSHOPEEPAY-20230912-32863549")
-	if err != nil {
-		fmt.Println("redis not exist")
-
-		res.Status = "internal-error"
-		res.Code = "99"
-		res.Message = "redist not exist"
-		return res
+func ChargePayment(rq *models.ChargeRq) (*models.ChargeRs, error) {
+	if err := validateCharge(rq); err != nil {
+		return nil, models.NewBadRequest(err.Error())
 	}
 
-	// convert to string
-	strData := fmt.Sprintf("%v", data)
-	// convert to struct
-	var chargeRs *models.ChargeRs
-	json.Unmarshal([]byte(strData), &chargeRs)
+	checkoutUrl := fmt.Sprintf("%s/payments/redirect/%s", Config().PublicBaseURL, rq.ReferenceId)
 
-	res.Status = "Ok"
-	res.Code = "00"
-	res.Message = "Request being processed"
-	res.Data = chargeRs
-	return res
-}
-
-func ChargePayment(rq *models.ChargeRq) (rs *models.ChargeRs, err error) {
-	res := new(models.ChargeRs)
-
-	// set action
-	act := new(models.Action)
-	act.CheckoutUrl = strings.ReplaceAll("http://127.0.0.1:8081/payments/redirect/{refid}", "{refid}", rq.ReferenceId)
-
-	// main rs
-	res.Id = "pgr_" + uuid.New().String()
-	res.ReferenceId = rq.ReferenceId
-	res.Status = "PENDING"
-	res.Currency = rq.Currency
-	res.CheckoutMethod = rq.CheckoutMethod
-	res.Amount = rq.Amount
-	res.PaymentCode = rq.PaymentCode
-	res.RedirectUrl = rq.RedirectUrl
-	res.CallbackUrl = rq.CallbackUrl
-	res.Created = time.Now()
-	res.Updated = time.Now()
-	res.Action = act
+	res := &models.ChargeRs{
+		Id:             "pgr_" + uuid.New().String(),
+		ReferenceId:    rq.ReferenceId,
+		Status:         "PENDING",
+		Currency:       strings.ToUpper(rq.Currency),
+		CheckoutMethod: rq.CheckoutMethod,
+		Amount:         rq.Amount,
+		PaymentCode:    rq.PaymentCode,
+		RedirectUrl:    rq.RedirectUrl,
+		CallbackUrl:    rq.CallbackUrl,
+		Created:        time.Now(),
+		Updated:        time.Now(),
+		Action:         &models.Action{CheckoutUrl: checkoutUrl},
+	}
 
 	bodyPayload, err := json.Marshal(res)
 	if err != nil {
 		log.Print("failed parsing json request", res, err)
-		return
+		return nil, models.NewInternalError("failed to process charge")
 	}
-
-	// save to redis - redisClient
-	rdc := NewRedisClient(host, redisPassword)
 
 	key := "chargetrx_" + rq.ReferenceId
-	ttl := time.Duration(300) * time.Second
+	ttl := time.Duration(Config().RedisTTL) * time.Second
 
-	err = SetData(rdc, key, bodyPayload, ttl)
-	if err != nil {
+	if err := SetData(key, bodyPayload, ttl); err != nil {
 		log.Print("set data to redis failed", err)
+		return nil, models.NewInternalError("failed to store charge")
 	}
 
 	return res, nil
 }
 
-func RefundPayment(rq *models.RefundRq) (rs *models.RefundRs, err error) {
-	res := new(models.RefundRs)
-
-	res.Id = "pgr_" + uuid.New().String()
-	res.ReferenceId = rq.ReferenceId
-	res.Amount = rq.Amount
-	res.Reason = rq.Reason
-	res.RefundStatus = "REFUND-PENDING"
-	res.Currency = rq.Currency
-	res.CreatedAt = time.Now()
-	res.UpdatedAt = time.Now()
-
-	opKey := "refundtrx_" + rq.ReferenceId
-
-	go func() { TriggerCallback(opKey) }()
-
-	return res, nil
-}
-
-func RedirectPayment(trxid string) (rs *models.SimpleResponse, err error) {
-	res := new(models.SimpleResponse)
-
-	opKey := "chargetrx_" + trxid
-
-	go func() { TriggerCallback(opKey) }()
-
-	// main rs
-	res.Status = "Ok"
-	res.Code = "00"
-	res.Message = "Request being processed"
-
-	return res, nil
-}
-
-// invoking partner
-func TriggerCallback(opKey string) {
-	res := new(models.ChargeRs)
-	sRs := new(models.SimpleResponse)
-	var rqPayload []byte
-	client := resty.New()
-
-	opKeyStr := strings.Split(opKey, "_")
-
-	if opKeyStr[0] == "chargetrx" {
-
-		// get to redis - redisClient
-		rdc := NewRedisClient(host, redisPassword)
-
-		data, err := GetData(rdc, opKey)
-		if err != nil {
-			fmt.Println("redis not exist")
-			return
-		}
-
-		// convert to string
-		strData := fmt.Sprintf("%v", data)
-		// convert to struct
-		var chargeRs *models.ChargeRs
-		json.Unmarshal([]byte(strData), &chargeRs)
-
-		chargeRs.Status = "SUCCEEDED"
-		chargeRs.Updated = time.Now()
-
-		bodyPayload, err := json.Marshal(chargeRs)
-		if err != nil {
-			log.Print("failed parsing json request", chargeRs, err)
-			return
-		}
-		rqPayload = bodyPayload
-
-	} else if opKeyStr[0] == "refundtrx" {
-
-		// get to redis - redisClient
-		rdc := NewRedisClient(host, redisPassword)
-
-		data, err := GetData(rdc, "chargetrx_"+opKeyStr[1])
-		if err != nil {
-			fmt.Println("redis not exist")
-			return
-		}
-
-		// convert to string
-		strData := fmt.Sprintf("%v", data)
-		// convert to struct
-		var chargeRs *models.ChargeRs
-		json.Unmarshal([]byte(strData), &chargeRs)
-
-		chargeRs.Status = "SUCCESS-REFUND"
-		chargeRs.Updated = time.Now()
-
-		bodyPayload, err := json.Marshal(chargeRs)
-		if err != nil {
-			log.Print("failed parsing json request", chargeRs, err)
-			return
-		}
-		rqPayload = bodyPayload
+func RefundPayment(rq *models.RefundRq) (*models.RefundRs, error) {
+	if rq.ReferenceId == "" || !referenceIdPattern.MatchString(rq.ReferenceId) {
+		return nil, models.NewBadRequest("invalid or missing reference_id")
+	}
+	if rq.Amount <= 0 {
+		return nil, models.NewBadRequest("invalid amount, must be greater than 0")
+	}
+	if rq.Currency == "" {
+		return nil, models.NewBadRequest("missing currency")
 	}
 
-	resp, err := client.R().
-		SetHeader("Content-Type", "application/json").
-		SetBody(rqPayload).
-		SetResult(sRs).
-		Post("http://ms-payment:9090/ms/api/v1/payment/notify")
+	charge, err := GetCharge(rq.ReferenceId)
 	if err != nil {
-		log.Print("failed invoke partner", res, err)
+		return nil, models.NewNotFound("charge not found for reference_id")
+	}
+	if charge.Status != "SUCCEEDED" {
+		return nil, models.NewBadRequest("charge is not in a refundable state")
+	}
+
+	res := &models.RefundRs{
+		Id:           "pgr_" + uuid.New().String(),
+		ReferenceId:  rq.ReferenceId,
+		Amount:       rq.Amount,
+		Reason:       rq.Reason,
+		RefundStatus: "REFUND-PENDING",
+		Currency:     strings.ToUpper(rq.Currency),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := SetData("refundtrx_"+rq.ReferenceId, res, time.Duration(Config().RedisTTL)*time.Second); err != nil {
+		log.Print("set refund data to redis failed", err)
+		return nil, models.NewInternalError("failed to store refund")
+	}
+
+	go TriggerCallback("refundtrx_" + rq.ReferenceId)
+
+	return res, nil
+}
+
+func RedirectPayment(trxid string) (*models.SimpleResponse, error) {
+	if trxid == "" || !referenceIdPattern.MatchString(trxid) {
+		return nil, models.NewBadRequest("invalid or missing transaction id")
+	}
+
+	charge, err := GetCharge(trxid)
+	if err != nil {
+		return nil, models.NewNotFound("charge not found")
+	}
+	if charge.Status == "SUCCEEDED" {
+		return &models.SimpleResponse{Status: "Ok", Code: "00", Message: "Payment already confirmed"}, nil
+	}
+
+	go TriggerCallback("chargetrx_" + trxid)
+
+	return &models.SimpleResponse{Status: "Ok", Code: "00", Message: "Request being processed"}, nil
+}
+
+func GetCharge(refId string) (*models.ChargeRs, error) {
+	data, err := GetData("chargetrx_" + refId)
+	if err != nil {
+		return nil, err
+	}
+	var charge models.ChargeRs
+	if err := json.Unmarshal([]byte(data), &charge); err != nil {
+		return nil, err
+	}
+	return &charge, nil
+}
+
+func TriggerCallback(opKey string) {
+	parts := strings.SplitN(opKey, "_", 2)
+	if len(parts) < 2 {
 		return
 	}
 
-	// callback request
-	log.Print(resp)
+	charge, err := GetCharge(parts[1])
+	if err != nil {
+		log.Printf("callback skipped, charge not found: %v", err)
+		return
+	}
+
+	switch parts[0] {
+	case "chargetrx":
+		charge.Status = "SUCCEEDED"
+	case "refundtrx":
+		charge.Status = "SUCCESS-REFUND"
+	default:
+		return
+	}
+	charge.Updated = time.Now()
+
+	payload, err := json.Marshal(charge)
+	if err != nil {
+		log.Print("failed parsing callback payload", err)
+		return
+	}
+
+	sendCallback(payload)
+}
+
+func sendCallback(payload []byte) {
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := SignPayload(Config().NotifySecret, timestamp, payload)
+
+	resp, err := resty.New().SetTimeout(15 * time.Second).R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("x-callback-signature", signature).
+		SetHeader("x-callback-timestamp", timestamp).
+		SetBody(payload).
+		Post(Config().NotifyURL)
+	if err != nil {
+		log.Printf("failed invoke notify: %v", err)
+		return
+	}
+	log.Printf("notify response status: %d, body: %s", resp.StatusCode(), resp.String())
 }

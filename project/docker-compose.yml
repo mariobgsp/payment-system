@@ -3,50 +3,54 @@ services:
     container_name: postgres
     image: 'postgres:15-alpine3.17'
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: always
-    deploy:
-      mode: replicated
-      replicas: 1
     environment:
       - POSTGRES_MULTIPLE_DATABASES=ms,transaction,log,partner
-      - POSTGRES_USER=microservices
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - ./db-data/postgres/:/var/lib/postgresql/data/
-      - ./pg-init-scripts:/docker-entrypoint-initdb.d
+      - pg-data:/var/lib/postgresql/data/
+      - ./pg-init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   mongo:
     container_name: mongo
-    image: 'mongo:4.2.16-bionic'
-    build:
-      context: ./../project/mongo
-      dockerfile: ./mongo.dockerfile
+    image: 'mongo:6.0'
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
       MONGO_INITDB_DATABASE: servicelog
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
-      - ./db-data/mongo/:/data/db
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   zookeeper:
     container_name: zookeeper
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.5.3
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - 22181:2181
-  
+      - 127.0.0.1:22181:2181
+
   kafka:
     container_name: kafka
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.5.3
     depends_on:
       - zookeeper
     ports:
-      - 29092:29092
+      - 127.0.0.1:29092:29092
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -54,6 +58,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
   kafka-ui:
     container_name: kafka-ui
@@ -61,107 +70,136 @@ services:
     depends_on:
       - kafka
     ports:
-      - 8090:8080
+      - 127.0.0.1:8090:8080
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
 
   redis:
-    image: redis:latest
+    image: redis:7-alpine
     restart: always
     ports:
-      - "6379:6379"
-    volumes:
-      - /path/to/local/data:/root/redis
-      - /path/to/local/redis.conf:/usr/local/etc/redis/redis.conf
-    environment:
-      - REDIS_PASSWORD=my-password
-      - REDIS_PORT=6379
-      - REDIS_DATABASES=0
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   ms-order:
     container_name: ms-order
-    build: 
+    build:
       context: ./../ms-order
       dockerfile: ./ms-order.dockerfile
     restart: always
-    deploy:
-      mode: replicated
-      replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - APP_SECRET_KEY=${APP_SECRET_KEY}
+      - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
-      - "8080:8080"
-    
+      - "127.0.0.1:8080:8080"
 
   ms-logger:
     container_name: ms-logger
-    build: 
+    build:
       context: ./../ms-logger
       dockerfile: ./ms-logger.dockerfile
     restart: always
-    deploy:
-      mode: replicated
-      replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
-      - SPRING_DATA_MONGODB_URI=mongodb://admin:password@mongo:27017
+      - SPRING_DATA_MONGODB_URI=mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017
     depends_on:
-      - mongo
-      - kafka
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     ports:
-      - "1337:1337"
-    
+      - "127.0.0.1:1337:1337"
 
   ms-payment:
     container_name: ms-payment
-    build: 
+    build:
       context: ./../ms-payment
       dockerfile: ./ms-payment.dockerfile
     restart: always
-    deploy:
-      mode: replicated
-      replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - PARTNER_API_KEY=${PARTNER_API_KEY}
+      - NOTIFY_SECRET=${NOTIFY_SECRET}
+      - PAYMENT_CHARGE_URL=http://ms-paymentagr:8081/payments/charge
+      - PAYMENT_REFUND_URL=http://ms-paymentagr:8081/payments/refund
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     ports:
-      - "9090:9090"
-    
+      - "127.0.0.1:9090:9090"
 
   ms-invoice:
     container_name: ms-invoice
-    build: 
+    build:
       context: ./../ms-invoice
       dockerfile: ./ms-invoice.dockerfile
     restart: always
-    deploy:
-      mode: replicated
-      replicas: 1
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVER=kafka:9092
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
-      - postgres
-      - kafka
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     ports:
-      - "8082:8082"
-    
+      - "127.0.0.1:8082:8082"
 
   ms-paymentagr:
     container_name: ms-paymentagr
-    build: 
+    build:
       context: ./../ms-paymentagr
       dockerfile: ./ms-paymentagr.dockerfile
     restart: always
-    deploy:
-      mode: replicated
-      replicas: 1
+    environment:
+      - REDIS_HOST=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - PARTNER_API_KEY=${PARTNER_API_KEY}
+      - NOTIFY_SECRET=${NOTIFY_SECRET}
+      - NOTIFY_URL=${NOTIFY_URL}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     ports:
-      - "8081:8081"
-    
+      - "127.0.0.1:8081:8081"
+
+  frontend:
+    container_name: frontend
+    build:
+      context: ./../frontend
+      dockerfile: ./frontend.dockerfile
+    restart: always
+    environment:
+      - MS_ORDER_URL=${MS_ORDER_URL}
+      - MS_PAYMENT_URL=${MS_PAYMENT_URL}
+      - FRONTEND_URL=${FRONTEND_URL}
+    depends_on:
+      - ms-order
+      - ms-payment
+    ports:
+      - "3000:3000"
+
+volumes:
+  pg-data:
+  mongo-data:

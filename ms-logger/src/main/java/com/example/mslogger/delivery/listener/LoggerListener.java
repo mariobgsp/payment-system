@@ -23,7 +23,6 @@ public class LoggerListener {
     @KafkaListener(topics = ApplicationConstant.LOGGER_TOPIC, containerFactory=ApplicationConstant.BEAN_LOG_CONTAINER_FACTORY)
     public void logsListener(@Payload String message, Acknowledgment ack) {
         log.info("logger event received, message: {} ", message);
-        ack.acknowledge();
 
         // process
         ServiceLog serviceLog = CommonUtils.gson.fromJson(message, ServiceLog.class);
@@ -34,6 +33,9 @@ public class LoggerListener {
         log.info("detail event, completionStatus: {} ", serviceLog.getCompletionStatus());
         log.info("insert log into mongodb ....");
         mongoRepository.insertToMongodb(serviceLog);
+
+        // acknowledge only after the log is persisted, to avoid losing events
+        ack.acknowledge();
     }
     
 }

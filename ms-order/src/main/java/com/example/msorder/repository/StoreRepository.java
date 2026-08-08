@@ -43,6 +43,6 @@ public class StoreRepository implements StoreImplementationRepository {
 
     @Override
     public List<Product> getSpecialProduct(boolean spFlag){
-        return jdbcTemplate.query(appProperties.getQUERY_GET_SPECIFIED_PRODUCT().replace("{boolean}", String.valueOf(spFlag)), new ProductRowMapper());
+        return jdbcTemplate.query(appProperties.getQUERY_GET_SPECIFIED_PRODUCT(), new ProductRowMapper(), spFlag);
     }
 }

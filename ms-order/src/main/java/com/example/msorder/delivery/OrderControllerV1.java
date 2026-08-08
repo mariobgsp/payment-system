@@ -51,13 +51,18 @@ public class OrderControllerV1 {
             @RequestParam(value="username", required = true) String username,
             @RequestHeader(value="x-request-channel") String channel,
             @RequestHeader(value="x-request-id") String requestId,
+            @RequestHeader(value="Authorization", required = false) String authorization,
             @RequestBody OrderRq bodyRq,
             HttpServletRequest httpServletRequest
     ){
         // construct request info
         RequestInfo request = CommonUtils.constructRequestInfo(channel, "order-product", requestId, bodyRq, httpServletRequest);
         log.info("[{}][REQUEST RECEIVED][{}][by: {}]",requestId, request.getOpName(), bodyRq);
-        ResponseInfo<Object> response = orderUsecase.orderProduct(request, username, bodyRq);
+        String bearerToken = null;
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            bearerToken = authorization.substring(7).trim();
+        }
+        ResponseInfo<Object> response = orderUsecase.orderProduct(request, username, bodyRq, bearerToken);
         log.info("[{}][REQUEST COMPLETED][{}][response: {}]",requestId, request.getOpName(), response);
 
         return new ResponseEntity<>(response.getBody(), response.getHttpHeaders(), response.getHttpStatus());
