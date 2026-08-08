@@ -1,5 +1,5 @@
 # Use an official Maven image to run Maven commands
-FROM maven:3.8.5-openjdk-17 AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 
 # Set the working directory in the container
 WORKDIR /app
@@ -12,7 +12,7 @@ COPY src /app/src
 RUN mvn clean install
 
 # Start with a clean base image for the runtime
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jre-jammy
 
 # Install necessary libraries
 RUN apt-get update && \

@@ -1,5 +1,5 @@
 # Use an official Maven image to run Maven commands
-FROM maven:3.8.5-openjdk-17 AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 
 # Set the working directory in the container
 WORKDIR /app
@@ -11,7 +11,7 @@ COPY src /app/src
 # Run the Maven build (clean install, tests included)
 RUN mvn clean install
 
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jre-jammy
 
 # Run as non-root user
 RUN groupadd -r app && useradd -r -g app app
