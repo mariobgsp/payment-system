@@ -19,10 +19,13 @@ import com.example.msorder.model.repository.Product;
 import com.example.msorder.model.repository.ProductTrx;
 import com.example.msorder.model.repository.StoreUser;
 import com.example.msorder.model.rqrs.request.RequestInfo;
+import com.example.msorder.model.rqrs.request.order.OrderRq;
+import com.example.msorder.model.rqrs.request.order.UserDetail;
 import com.example.msorder.model.rqrs.response.ResponseInfo;
 import com.example.msorder.repository.LogRepository;
 import com.example.msorder.repository.StoreRepository;
 import com.example.msorder.utils.CommonUtils;
+import com.example.msorder.utils.SecurityUtils;
 
 public class OrderUsecaseTests {
 
@@ -109,8 +112,91 @@ public class OrderUsecaseTests {
     }
 
     @Test
-    void orderProduct(){
+    void orderProductWithValidToken() throws Exception {
+        // init request info
+        RequestInfo requestInfo = CommonUtils.constructRequestInfo(
+            "W", 
+            "unit-test", 
+            "unit-test-request-id", 
+            "test-username", 
+            null);
 
+        // init store user with a legacy HMAC hash of "secretpass"
+        StoreUser storeUser = new StoreUser();
+        storeUser.setSpecialProduct(true);
+        storeUser.setUserId("UID-1");
+        storeUser.setUserName("test-username");
+        storeUser.setHashPassword(SecurityUtils.encodeRequestBody("secretpass", "test-secret"));
+        List<StoreUser> lStoreUsers = new ArrayList<>();
+        lStoreUsers.add(storeUser);
+
+        // init product
+        Product product = new Product();
+        product.setProductCode("ID123");
+        product.setProductName("productname");
+        product.setPrice(1000);
+        product.setDiscount(0D);
+        product.setEnableDiscount(false);
+
+        List<Product> products = new ArrayList<>();
+        products.add(product);
+
+        Mockito.when(appProperties.getSECRET_KEY()).thenReturn("test-secret");
+        Mockito.when(storeRepository.getUserDetail("test-username")).thenReturn(lStoreUsers);
+        Mockito.when(storeRepository.getSingleProduct("ID123")).thenReturn(products);
+        Mockito.when(logRepository.getSequence(Mockito.any())).thenReturn(1L);
+        Mockito.when(appProperties.getORDER_STATUS_CREATED()).thenReturn("CREATED");
+        Mockito.when(appProperties.getPAYMENT_STATUS_CREATED()).thenReturn("CREATED");
+
+        OrderRq orderRq = new OrderRq();
+        orderRq.setProductCode("ID123");
+        orderRq.setProductName("productname");
+        orderRq.setAmount(2);
+        orderRq.setPrice(1000);
+        orderRq.setEnableDiscount(false);
+        UserDetail userDetail = new UserDetail();
+        userDetail.setUsername("test-username");
+        userDetail.setPassword("secretpass");
+        orderRq.setUserDetail(userDetail);
+
+        ResponseInfo<Object> responseInfo = orderUsecase.orderProduct(requestInfo, "test-username", orderRq, null);
+        assertEquals(HttpStatus.OK, responseInfo.getHttpStatus());
+        Mockito.verify(logRepository).insertProductTrx(Mockito.any(), Mockito.any());
+    }
+
+    @Test
+    void orderProductRejectsWrongPassword() throws Exception {
+        RequestInfo requestInfo = CommonUtils.constructRequestInfo(
+            "W",
+            "unit-test",
+            "unit-test-request-id",
+            "test-username",
+            null);
+
+        StoreUser storeUser = new StoreUser();
+        storeUser.setSpecialProduct(true);
+        storeUser.setUserId("UID-1");
+        storeUser.setUserName("test-username");
+        storeUser.setHashPassword(SecurityUtils.encodeRequestBody("secretpass", "test-secret"));
+        List<StoreUser> lStoreUsers = new ArrayList<>();
+        lStoreUsers.add(storeUser);
+
+        Mockito.when(appProperties.getSECRET_KEY()).thenReturn("test-secret");
+        Mockito.when(storeRepository.getUserDetail("test-username")).thenReturn(lStoreUsers);
+
+        OrderRq orderRq = new OrderRq();
+        orderRq.setProductCode("ID123");
+        orderRq.setProductName("productname");
+        orderRq.setAmount(1);
+        orderRq.setPrice(1000);
+        UserDetail userDetail = new UserDetail();
+        userDetail.setUsername("test-username");
+        userDetail.setPassword("wrongpass");
+        orderRq.setUserDetail(userDetail);
+
+        ResponseInfo<Object> responseInfo = orderUsecase.orderProduct(requestInfo, "test-username", orderRq, null);
+        assertEquals(HttpStatus.BAD_REQUEST, responseInfo.getHttpStatus());
+        Mockito.verify(logRepository, Mockito.never()).insertProductTrx(Mockito.any(), Mockito.any());
     }
 
     @Test

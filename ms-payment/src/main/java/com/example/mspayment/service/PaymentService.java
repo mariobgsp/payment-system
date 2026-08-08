@@ -28,7 +28,7 @@ public class PaymentService {
     public HttpHeaders getHttpHeaders(RequestInfo requestInfo){
         HttpHeaders headers = new HttpHeaders();
         headers.add("request-id", requestInfo.getRequestId());
-        headers.add("api-key", "test");
+        headers.add("api-key", appProperties.getPartnerApiKey());
         return headers;
     }
 

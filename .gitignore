@@ -1,4 +1,20 @@
-
+# editor
 .vscode
-
 .idea
+
+# secrets
+.env
+
+# local database data (never commit live data)
+project/db-data/
+
+# node
+node_modules/
+.next/
+out/
+
+# java
+target/
+
+# logs
+*.log

@@ -12,8 +12,6 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.CompletableFuture;
-
 @Service("PaymentServices")
 @Slf4j
 public class PaymentEventListener {
@@ -24,21 +22,24 @@ public class PaymentEventListener {
     @KafkaListener(topics = "ms-notify-payment", containerFactory=ApplicationConstant.BEAN_PAYMENT_EVENT_CONTAINER_FACTORY)
     public void paymentListener(@Payload String message, Acknowledgment ack) {
         log.info("logger event received, message: {} ", message);
-        ack.acknowledge();
 
-        // process
-        KafkaMessageRq kafkaMessageRq = CommonUtils.gson.fromJson(message, KafkaMessageRq.class);
-        log.info("detail payment event, transactionId: {} ", kafkaMessageRq.getTransactionId());
-        log.info("detail payment event, paymentStatus: {} ", kafkaMessageRq.getPaymentStatus());
-        log.info("detail payment event, orderStatus: {} ", kafkaMessageRq.getOrderStatus());
+        try {
+            // process
+            KafkaMessageRq kafkaMessageRq = CommonUtils.gson.fromJson(message, KafkaMessageRq.class);
+            log.info("detail payment event, transactionId: {} ", kafkaMessageRq.getTransactionId());
+            log.info("detail payment event, paymentStatus: {} ", kafkaMessageRq.getPaymentStatus());
+            log.info("detail payment event, orderStatus: {} ", kafkaMessageRq.getOrderStatus());
 
-        // construct request info
-        RequestInfo request = CommonUtils.constructRequestInfo("kafka-listener", "provision-notify-payment", kafkaMessageRq.getTransactionId(), kafkaMessageRq, null);
+            // construct request info
+            RequestInfo request = CommonUtils.constructRequestInfo("kafka-listener", "provision-notify-payment", kafkaMessageRq.getTransactionId(), kafkaMessageRq, null);
 
-        if(kafkaMessageRq.getOrderStatus().equals("PUBLISHED") && kafkaMessageRq.getPaymentStatus().equals("SUCCESS")){
-            CompletableFuture.runAsync(()->paymentInvoiceUsecase.process(request, kafkaMessageRq.getTransactionId()));
+            if(kafkaMessageRq.getOrderStatus().equals("PUBLISHED") && kafkaMessageRq.getPaymentStatus().equals("SUCCESS")){
+                paymentInvoiceUsecase.process(request, kafkaMessageRq.getTransactionId());
+            }
+        } finally {
+            // acknowledge only after processing completes, to avoid losing events
+            ack.acknowledge();
         }
     }
 
 }
-

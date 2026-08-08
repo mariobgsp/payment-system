@@ -1,5 +1,5 @@
 # Use the official Go image
-FROM golang:1.20 AS builder
+FROM golang:1.21-alpine AS builder
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -14,7 +14,21 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o main .
+RUN CGO_ENABLED=0 go build -o main .
+
+# Minimal runtime image
+FROM alpine:3.19
+
+# Run as non-root user
+RUN addgroup -S app && adduser -S -G app app
+
+WORKDIR /app
+
+COPY --from=builder /app/main .
+
+USER app
+
+EXPOSE 8081
 
 # Start the app
-CMD ["./main"]
+ENTRYPOINT ["./main"]

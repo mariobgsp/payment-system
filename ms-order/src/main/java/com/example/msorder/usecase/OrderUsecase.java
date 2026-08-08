@@ -19,8 +19,10 @@ import com.example.msorder.model.rqrs.request.order.OrderRq;
 import com.example.msorder.model.rqrs.response.ResponseInfo;
 import com.example.msorder.model.rqrs.response.ViewProductRs;
 import com.example.msorder.model.rqrs.response.order.OrderRs;
+import com.example.msorder.model.rqrs.response.UserDetailRs;
 import com.example.msorder.repository.LogRepository;
 import com.example.msorder.repository.StoreRepository;
+import com.example.msorder.service.SessionService;
 import com.example.msorder.utils.CommonUtils;
 import com.example.msorder.utils.ResponseUtils;
 import com.example.msorder.utils.SecurityUtils;
@@ -41,6 +43,8 @@ public class OrderUsecase extends BaseUsecase{
     private StoreRepository storeRepository;
     @Autowired
     private LogRepository logRepository;
+    @Autowired
+    private SessionService sessionService;
 
     public ResponseInfo<Object> viewProduct(RequestInfo requestInfo, String username){
         log.info("[{} - viewProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
@@ -104,8 +108,19 @@ public class OrderUsecase extends BaseUsecase{
             if(storeUsers.size()==0){
                 throw new UserNotFoundException("01", "User not allowed or not available to view product");
             }
+            StoreUser storeUser = storeUsers.get(0);
+            // only safe fields are exposed, never the password hash or stored token
+            UserDetailRs userDetailRs = new UserDetailRs()
+                    .setId(storeUser.getId())
+                    .setUserId(storeUser.getUserId())
+                    .setUsername(storeUser.getUserName())
+                    .setFirstName(storeUser.getFirstName())
+                    .setLastName(storeUser.getLastName())
+                    .setEmail(storeUser.getEmail())
+                    .setSpecialProduct(storeUser.isSpecialProduct())
+                    .setRecurring(storeUser.isRecurring());
             //set success
-            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, storeUsers);
+            responseInfo = ResponseUtils.generateSuccessRs(requestInfo, userDetailRs);
         }catch (Exception e){
             log.error("[{} - getUserInfo][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
@@ -117,15 +132,15 @@ public class OrderUsecase extends BaseUsecase{
     }
 
 
-    public ResponseInfo<Object> orderProduct(RequestInfo requestInfo, String username, OrderRq bodyRq){
+    public ResponseInfo<Object> orderProduct(RequestInfo requestInfo, String username, OrderRq bodyRq, String bearerToken){
         log.info("[{} - orderProduct][{}][{}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData());
         ResponseInfo<Object> responseInfo = new ResponseInfo<>();
         try{
             // validate request body
             if(StringUtils.isEmpty(bodyRq.getProductCode())
                     || StringUtils.isEmpty(bodyRq.getProductName())
-                    || StringUtils.isEmpty(bodyRq.getUserDetail().getUsername())
-                    || StringUtils.isEmpty(bodyRq.getUserDetail().getPassword())){
+                    || bodyRq.getUserDetail() == null
+                    || StringUtils.isEmpty(bodyRq.getUserDetail().getUsername())){
                 throw new BadRequestException("03", "Invalid value should not be empty");
             }
 
@@ -137,8 +152,17 @@ public class OrderUsecase extends BaseUsecase{
             if(storeUsers.size()==0){
                 throw new UserNotFoundException("01", "User not allowed or not available to view product");
             }
-            String hashPassword = SecurityUtils.encodeRequestBody(bodyRq.getUserDetail().getPassword(), appProperties.getSECRET_KEY());
-            if(!hashPassword.equals(storeUsers.get(0).getHashPassword())){
+
+            // authenticate: valid session token OR password
+            boolean authenticated = false;
+            if (!StringUtils.isEmpty(bearerToken)) {
+                SessionService.Session session = sessionService.validate(bearerToken);
+                authenticated = session != null && session.username().equals(username);
+            }
+            if (!authenticated && !StringUtils.isEmpty(bodyRq.getUserDetail().getPassword())) {
+                authenticated = SecurityUtils.verifyPassword(bodyRq.getUserDetail().getPassword(), storeUsers.get(0).getHashPassword(), appProperties.getSECRET_KEY());
+            }
+            if (!authenticated) {
                 throw new BadRequestException("05", "Invalid password");
             }
 

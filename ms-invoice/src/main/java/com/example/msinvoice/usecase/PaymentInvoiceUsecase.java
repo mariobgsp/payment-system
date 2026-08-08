@@ -44,7 +44,7 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
 
             // generate document using jrxml
             log.info("generatePaymentReport... {}", transactionId);
-//            generatePaymentReport(transactionId, p.getPrice().doubleValue(), p.getProductName(), p.getPaymentDate());
+            generatePaymentReport(transactionId, p.getPrice().doubleValue(), p.getProductName(), p.getPaymentDate());
 
             p.setSysUpdateDate(new Date());
             p.setOrderStatus("SUCCESS");
@@ -82,7 +82,9 @@ public class PaymentInvoiceUsecase extends BaseUsecase{
 
             // Export to PDF
             log.info("exporting generatePaymentReport... {}", transactionId);
-            String outputFile = "/app/invoice/"+"invoice_"+ transactionId + ".pdf";
+            // sanitize the transaction id to prevent path traversal
+            String safeTransactionId = transactionId.replaceAll("[^a-zA-Z0-9\\-_]", "");
+            String outputFile = "/app/invoice/"+"invoice_"+ safeTransactionId + ".pdf";
             JasperExportManager.exportReportToPdfFile(jasperPrint, outputFile);
 
             log.info("success generate report {}", outputFile);
