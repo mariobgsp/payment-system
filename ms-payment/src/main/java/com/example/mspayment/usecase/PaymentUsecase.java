@@ -18,6 +18,7 @@ import com.example.mspayment.service.PaymentService;
 import com.example.mspayment.utils.CommonUtils;
 import com.example.mspayment.utils.ResponseUtils;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -46,9 +47,9 @@ public class PaymentUsecase extends BaseUsecase{
             if (productTrxList.isEmpty()){
                 throw new TrxNotFoundException("01", "transaction not found");
             }
-            // idempotency guard — if already READY/SUCCESS, return existing without re-charge (fix duplicate charge)
+            // idempotency guard — if already READY/SUCCESS, return existing without re-charge (fix duplicate charge) — null-safe
             String existingStatus = productTrxList.get(0).getPaymentStatus();
-            if (appProperties.getPAYMENT_STATUS_READY().equals(existingStatus) || appProperties.getPAYMENT_STATUS_SUCCESS().equals(existingStatus)) {
+            if (Objects.equals(existingStatus, appProperties.getPAYMENT_STATUS_READY()) || Objects.equals(existingStatus, appProperties.getPAYMENT_STATUS_SUCCESS())) {
                 log.info("createPayment idempotent hit for {}", transactionId);
                 CreatePaymentRs existingRs = new CreatePaymentRs();
                 existingRs.setCheckoutUrl("/pay/" + transactionId);
