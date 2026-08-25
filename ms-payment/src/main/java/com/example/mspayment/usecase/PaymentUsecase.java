@@ -47,9 +47,9 @@ public class PaymentUsecase extends BaseUsecase{
             if (productTrxList.isEmpty()){
                 throw new TrxNotFoundException("01", "transaction not found");
             }
-            // idempotency guard — if already READY/SUCCESS, return existing without re-charge (fix duplicate charge) — null-safe
+            // idempotency guard — if already READY/SUCCESS, return existing without re-charge (fix duplicate charge) — null-safe, avoid null==null true
             String existingStatus = productTrxList.get(0).getPaymentStatus();
-            if (Objects.equals(existingStatus, appProperties.getPAYMENT_STATUS_READY()) || Objects.equals(existingStatus, appProperties.getPAYMENT_STATUS_SUCCESS())) {
+            if (existingStatus != null && (existingStatus.equals(appProperties.getPAYMENT_STATUS_READY()) || existingStatus.equals(appProperties.getPAYMENT_STATUS_SUCCESS()))) {
                 log.info("createPayment idempotent hit for {}", transactionId);
                 CreatePaymentRs existingRs = new CreatePaymentRs();
                 existingRs.setCheckoutUrl("/pay/" + transactionId);
