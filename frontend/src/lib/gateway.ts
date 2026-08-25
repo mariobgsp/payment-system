@@ -71,7 +71,12 @@ export class HttpGateway implements Gateway {
 
   products = {
     list: async (username: string, token?: string): Promise<Product[]> => {
-      const url = new URL(`${BASE_ORDER}/ms/api/v1/view/product`);
+      let url: URL;
+      try {
+        url = new URL(`${BASE_ORDER}/ms/api/v1/view/product`);
+      } catch {
+        throw new Error("invalid base URL");
+      }
       url.searchParams.set("username", username);
       return unwrap<Product[]>(url.toString(), { headers: buildHeaders(token), cache: "no-store" });
     },
@@ -82,7 +87,12 @@ export class HttpGateway implements Gateway {
       cmd: { productCode: string; productName: string; amount: number; price: number; enableDiscount?: boolean; username: string },
       token?: string
     ): Promise<OrderResult> => {
-      const url = new URL(`${BASE_ORDER}/ms/api/v1/order/product`);
+      let url: URL;
+      try {
+        url = new URL(`${BASE_ORDER}/ms/api/v1/order/product`);
+      } catch {
+        throw new Error("invalid base URL");
+      }
       url.searchParams.set("username", cmd.username);
       const data = await unwrap<{ transactionId: string; createdAt: string }>(url.toString(), {
         method: "POST",
@@ -99,7 +109,12 @@ export class HttpGateway implements Gateway {
       return { transactionId: data.transactionId, createdAt: data.createdAt ?? new Date().toISOString() };
     },
     check: async (transactionId: string, username: string, token?: string): Promise<ProductTrx> => {
-      const url = new URL(`${BASE_ORDER}/ms/api/v1/order/${encodeURIComponent(transactionId)}/check`);
+      let url: URL;
+      try {
+        url = new URL(`${BASE_ORDER}/ms/api/v1/order/${encodeURIComponent(transactionId)}/check`);
+      } catch {
+        throw new Error("invalid base URL or transactionId");
+      }
       url.searchParams.set("username", username);
       const data = await unwrap<ProductTrx | ProductTrx[]>(url.toString(), { headers: buildHeaders(token), cache: "no-store" });
       if (Array.isArray(data)) {
@@ -113,7 +128,12 @@ export class HttpGateway implements Gateway {
 
   payment = {
     create: async (transactionId: string, username: string, token?: string, type = "SHOPEEPAY"): Promise<PaymentResult> => {
-      const url = new URL(`${BASE_PAYMENT}/ms/api/v1/payment/create/${encodeURIComponent(type)}`);
+      let url: URL;
+      try {
+        url = new URL(`${BASE_PAYMENT}/ms/api/v1/payment/create/${encodeURIComponent(type)}`);
+      } catch {
+        throw new Error("invalid base URL or type");
+      }
       url.searchParams.set("transaction_id", transactionId);
       url.searchParams.set("username", username);
       const raw = await unwrap<unknown>(url.toString(), {
@@ -152,10 +172,10 @@ export class FakeGateway implements Gateway {
     },
   };
   products = {
-    list: async (): Promise<Product[]> => this.productList,
+    list: async (_username: string, _token?: string): Promise<Product[]> => this.productList,
   };
   order = {
-    create: async (cmd: { productCode: string; productName: string; amount: number; price: number; username: string }): Promise<OrderResult> => {
+    create: async (cmd: { productCode: string; productName: string; amount: number; price: number; username: string }, _token?: string): Promise<OrderResult> => {
       const id = `PTRX-${Math.random().toString(36).slice(2, 10)}`;
       this.orders[id] = {
         id: `MSO-${id}`, sysCreationDate: new Date().toISOString(), transactionId: id, orderStatus: "CREATED", paymentStatus: "CREATED",
@@ -164,21 +184,21 @@ export class FakeGateway implements Gateway {
       };
       return { transactionId: id, createdAt: new Date().toISOString() };
     },
-    check: async (transactionId: string): Promise<ProductTrx> => {
+    check: async (transactionId: string, _username: string, _token?: string): Promise<ProductTrx> => {
       const t = this.orders[transactionId];
       if (!t) throw new Error("not found");
       return t;
     },
   };
   payment = {
-    create: async (transactionId: string): Promise<PaymentResult> => {
+    create: async (transactionId: string, _username: string, _token?: string, _type?: string): Promise<PaymentResult> => {
       const p = { CheckoutUrl: `/pay/${transactionId}` };
       this.payments[transactionId] = p;
       const o = this.orders[transactionId];
       if (o) o.paymentStatus = "READY";
       return p;
     },
-    refund: async (transactionId: string): Promise<unknown> => {
+    refund: async (transactionId: string, _username: string, _token?: string): Promise<unknown> => {
       const o = this.orders[transactionId];
       if (!o || o.paymentStatus !== "SUCCESS") throw new Error("not refundable");
       o.paymentStatus = "REFUND";
