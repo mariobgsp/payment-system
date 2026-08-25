@@ -48,7 +48,7 @@ public class PaymentUsecase extends BaseUsecase{
             }
             // idempotency guard — if already READY/SUCCESS, return existing without re-charge (fix duplicate charge)
             String existingStatus = productTrxList.get(0).getPaymentStatus();
-            if (existingStatus.equals(appProperties.getPAYMENT_STATUS_READY()) || existingStatus.equals(appProperties.getPAYMENT_STATUS_SUCCESS())) {
+            if (appProperties.getPAYMENT_STATUS_READY().equals(existingStatus) || appProperties.getPAYMENT_STATUS_SUCCESS().equals(existingStatus)) {
                 log.info("createPayment idempotent hit for {}", transactionId);
                 CreatePaymentRs existingRs = new CreatePaymentRs();
                 existingRs.setCheckoutUrl("/pay/" + transactionId);
