@@ -46,6 +46,14 @@ public class PaymentUsecase extends BaseUsecase{
             if (productTrxList.isEmpty()){
                 throw new TrxNotFoundException("01", "transaction not found");
             }
+            // idempotency guard — if already READY/SUCCESS, return existing without re-charge (fix duplicate charge)
+            String existingStatus = productTrxList.get(0).getPaymentStatus();
+            if (existingStatus.equals(appProperties.getPAYMENT_STATUS_READY()) || existingStatus.equals(appProperties.getPAYMENT_STATUS_SUCCESS())) {
+                log.info("createPayment idempotent hit for {}", transactionId);
+                CreatePaymentRs existingRs = new CreatePaymentRs();
+                existingRs.setCheckoutUrl("/pay/" + transactionId);
+                responseInfo = ResponseUtils.generateSuccessRs(requestInfo, existingRs);
+            } else {
 
             // construct request rq
             PaymentRq paymentRq = new PaymentRq();
@@ -68,6 +76,7 @@ public class PaymentUsecase extends BaseUsecase{
                 createPaymentRs.setCheckoutUrl(paymentRs.getAction().getCheckout_url());
             }
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, createPaymentRs);
+            } // end idempotency else
         }catch (Exception e) {
             log.error("[{} - createPayment][{}][{}][Error: {}]", requestInfo.getRequestId(), requestInfo.getOpName(), requestInfo.getRequestData(), e.getMessage());
             CommonException ex = (e instanceof CommonException) ? (CommonException) e : new CommonException(e);
@@ -99,8 +108,8 @@ public class PaymentUsecase extends BaseUsecase{
 
             PaymentRefundRs paymentRefundRs = paymentService.paymentRefund(requestInfo, paymentRefundRq);
 
-            // update in multipayment trx
-            transactionRepository.updateProductTrx(refundRq.getTransactionId() , productTrxList.get(0).getPaymentStatus() , appProperties.getPAYMENT_STATUS_REFUND());
+            // update in multipayment trx — keep orderStatus, set paymentStatus REFUND
+            transactionRepository.updateProductTrx(refundRq.getTransactionId() , productTrxList.get(0).getOrderStatus() , appProperties.getPAYMENT_STATUS_REFUND());
 
             responseInfo = ResponseUtils.generateSuccessRs(requestInfo, paymentRefundRs);
         }catch (Exception e){

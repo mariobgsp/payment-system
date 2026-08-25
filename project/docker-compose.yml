@@ -185,6 +185,31 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
 
+  monolith:
+    container_name: monolith
+    build:
+      context: ./../monolith
+      dockerfile: ./monolith.dockerfile
+    restart: always
+    environment:
+      - PORT=8085
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/transaction?sslmode=disable
+      - REDIS_HOST=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8085:8085"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   frontend:
     container_name: frontend
     build:
@@ -192,12 +217,12 @@ services:
       dockerfile: ./frontend.dockerfile
     restart: always
     environment:
-      - MS_ORDER_URL=${MS_ORDER_URL}
-      - MS_PAYMENT_URL=${MS_PAYMENT_URL}
+      - MS_ORDER_URL=http://monolith:8085
+      - MS_PAYMENT_URL=http://monolith:8085
       - FRONTEND_URL=${FRONTEND_URL}
     depends_on:
-      - ms-order
-      - ms-payment
+      monolith:
+        condition: service_healthy
     ports:
       - "3000:3000"
 

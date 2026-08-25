@@ -1,13 +1,14 @@
 import { cookies } from "next/headers";
-import { randomUUID } from "crypto";
+import { buildHeaders as gwBuildHeaders, unwrap } from "./gateway";
 import type { ApiEnvelope } from "./types";
 
 export const SESSION_COOKIE = "ps_token";
 export const USERNAME_COOKIE = "ps_username";
 export const SESSION_TTL_SECONDS = 30 * 60;
 
+// Single BASE now hides MS_ORDER_URL/MS_PAYMENT_URL split (monolith:8085) — keep legacy exports for compat
 export const MS_ORDER_URL = process.env.MS_ORDER_URL ?? "http://localhost:8080";
-export const MS_PAYMENT_URL = process.env.MS_PAYMENT_URL ?? "http://localhost:9090";
+export const MS_PAYMENT_URL = process.env.MS_PAYMENT_URL ?? "http://localhost:8080";
 export const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
 export async function getSession() {
@@ -17,31 +18,16 @@ export async function getSession() {
   return { token, username };
 }
 
-export function buildHeaders(token?: string | null) {
-  return {
-    "content-type": "application/json",
-    "x-request-channel": "WEB",
-    "x-request-id": randomUUID(),
-    ...(token ? { authorization: `Bearer ${token}` } : {}),
-  };
-}
-
+export const buildHeaders = gwBuildHeaders;
+// proxyFetch now delegates to gateway unwrap (same envelope check {code=="00"}) — single source
+// ponytail: keep proxyFetch name for existing BFF routes, impl via unwrap
 export async function proxyFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
-  }
-  if (res.ok && body !== null) {
-    return body as T;
-  }
-  const env = body as ApiEnvelope<unknown> | null;
-  const message = env?.message ?? `request failed with status ${res.status}`;
-  throw new Error(message);
+  return unwrap<T>(url, init);
 }
 
 export function toEnvelope<T>(ok: boolean, data: T | null, message: string, status = 200) {
   return Response.json({ ok, data, message }, { status });
 }
+
+export { HttpGateway, FakeGateway } from "./gateway";
+export type { Gateway } from "./gateway";
