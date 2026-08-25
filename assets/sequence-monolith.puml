@@ -1,0 +1,143 @@
+@startuml
+' White background — as requested
+skinparam backgroundColor #FFFFFF
+skinparam defaultBackgroundColor #FFFFFF
+skinparam Shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 13
+skinparam sequence {
+  ArrowColor #1F2937
+  LifeLineBorderColor #374151
+  LifeLineBackgroundColor #F9FAFB
+  ParticipantBorderColor #111827
+  ParticipantBackgroundColor #FFFFFF
+}
+skinparam note {
+  BackgroundColor #F3F4F6
+  BorderColor #D1D5DB
+}
+skinparam title {
+  FontSize 18
+  FontColor #111827
+  BorderThickness 0
+}
+title Payment System — Monolith TransactionLifecycle (low-cost SaaS)\n<small>Frontend → Monolith (Go) → PostgreSQL (store + transaction) + Redis • Outbox replaces Kafka/Mongo • White background</small>
+
+actor User as U
+participant "Frontend\nNext.js BFF\n:3000" as FE #E0E7FF
+participant "Monolith\nGo :8085\nTransactionLifecycle" as M #DBEAFE
+database "PostgreSQL\ntransaction + store" as PG #FEF3C7
+database "Redis\n7-alpine\nsession/idempotency" as RD #FCE7F3
+participant "Jobs\nSweeper 60s\nOutboxPoller 5s" as JOB #D1FAE5
+
+autonumber
+
+== 1 — Auth (BCrypt, single-DSN) ==
+U -> FE : POST /api/auth/login\n{username, password}
+FE -> M : POST /ms/api/v1/auth/login\n{username, password}
+M -> PG : SELECT store.store_user\nWHERE username = ? 
+note right: Demo users seeded in\ntransaction DB (store schema)
+PG --> M : {userId, bcrypt hash, specialProduct}
+M -> M : bcrypt.CompareHashAndPassword
+M --> FE : 200 {code:"00", token:"monolith-<userId>"}
+FE --> U : Set-Cookie ps_token\n200 ok
+
+== 2 — Catalog (specialProduct seam) ==
+U -> FE : GET /api/products
+FE -> M : GET /ms/api/v1/view/product?username=klhomme0
+M -> PG : SELECT store.store_user (specialProduct?)
+alt specialProduct = true
+  M -> PG : SELECT store.product (all)
+else specialProduct = false
+  M -> PG : SELECT store.product WHERE specialProduct=false AND productStatus=true
+end
+PG --> M : [products]
+M --> FE : 200 {code:"00", data:[...]}
+FE --> U : render catalog
+
+== 3 — Create Order (Idempotency-Key, pricing inside Lifecycle) ==
+U -> FE : POST /api/order {productCode, price, amount}
+FE -> M : POST /ms/api/v1/order/product?username=klhomme0\nHeader: Idempotency-Key: <uuid>\nBody: {productCode, amount, price, enableDiscount}
+M -> PG : SELECT store.product (discount)\nSELECT store.store_user (userId)
+M -> M : calcPriceCharge(price, discount, amount, enableDiscount)\nnote right: 11362*(1-0.3)=7953*2=15906\ninside TransactionLifecycle Module
+M -> PG : BEGIN\nINSERT transaction.product_trx (CREATED/CREATED)\nINSERT transaction.outbox (servicelogs)\nINSERT transaction.idempotency (key, '{}')\nCOMMIT
+PG --> M : transactionId = PTRX-xxxxxxxx
+M -> PG : INSERT transaction.idempotency response (cached)
+M --> FE : 200 {code:"00", data:{transactionId, createdAt}}
+FE --> U : order created
+
+note over M, PG : Second POST with same Idempotency-Key →\nPG SELECT idempotency → return cached transactionId (no new row)
+
+== 4 — Charge (idempotent, CREATED → READY) ==
+U -> FE : POST /api/payment {transactionId}
+FE -> M : POST /ms/api/v1/payment/create/SHOPEEPAY?transaction_id=PTRX-...&username=klhomme0
+M -> PG : SELECT transaction.product_trx FOR UPDATE
+alt paymentStatus == READY
+  M --> FE : 200 {CheckoutUrl:"/pay/PTRX-..."} (idempotent)
+else paymentStatus == CREATED
+  M -> PG : BEGIN\nUPDATE product_trx SET READY/READY\nINSERT outbox (servicelogs)\nCOMMIT
+  PG --> M : ok
+  M --> FE : 200 {CheckoutUrl:"/pay/PTRX-..."}
+else else
+  M --> FE : 409 "charge is not in refundable state"
+end
+
+== 5 — Check (authz: username → userId) ==
+U -> FE : poll GET /api/order/check?transactionId=PTRX-...
+FE -> M : GET /ms/api/v1/order/PTRX-.../check?username=klhomme0
+M -> PG : SELECT store.store_user WHERE username=klhomme0 → userId=b2xrasd
+M -> PG : SELECT transaction.product_trx FOR UPDATE
+M -> M : if trx.userId != callerUserId → 401
+PG --> M : trx (READY/READY)
+M --> FE : 200 {data: productTrx}
+FE --> U : show READY
+
+== 6 — Payment Confirm → Callback (SUCCEEDED → SUCCESS/PUBLISHED) ==
+U -> M : POST /ms/api/v1/payment/notify\n{referenceId: PTRX-..., status:"SUCCEEDED"} \nnote right: Simulates partner redirect /\nHMAC verified (bcrypt/ HMAC seam)
+M -> PG : SELECT product_trx FOR UPDATE
+alt paymentStatus == SUCCESS (already)
+  M --> U : 202 accepted (idempotent)
+else paymentStatus == READY
+  M -> PG : BEGIN\nUPDATE SET orderStatus=PUBLISHED, paymentStatus=SUCCESS\nINSERT outbox (ms-notify-payment)\nCOMMIT
+  PG --> M : ok
+  M --> U : 202 accepted
+end
+M -> JOB : outbox ms-notify-payment enqueued
+
+== 7 — Outbox Poller (3× backoff, DLQ) ==
+loop every 5s
+  JOB -> PG : SELECT outbox WHERE processed_at IS NULL LIMIT 50
+  PG --> JOB : [payload]
+  JOB -> JOB : Send(topic, payload) → log / http
+  alt send ok
+    JOB -> PG : UPDATE outbox SET processed_at=now()
+  else fail after 3× (100ms, 400ms, 1600ms)
+    JOB -> PG : UPDATE outbox SET processed_at=now()\nINSERT dlq (topic=dlq.<orig>)
+  end
+end
+
+== 8 — Sweeper (missing flow: stale READY → FAILED) ==
+loop every 60s
+  JOB -> PG : SELECT product_trx WHERE paymentStatus='READY' AND sys_creation < now()-5m
+  PG --> JOB : [stale PTRX-...]
+  JOB -> PG : BEGIN\nUPDATE SET paymentStatus='FAILED'\nINSERT outbox (servicelogs, reason stale-ready-timeout)\nCOMMIT
+end
+note right: Fixes flow missing in Java version:\nRedis TTL 300s expired but PG row stayed READY forever\n→ now sweeper ensures failed state, no money limbo
+
+== 9 — Refund (SUCCESS → REFUND, full only) & Second Refund 409 ==
+U -> FE : POST /api/payment/refund {transactionId}
+FE -> M : POST /ms/api/v1/payment/refund {transactionId}
+M -> PG : SELECT product_trx FOR UPDATE
+alt paymentStatus in (SUCCESS, PUBLISHED)
+  M -> PG : BEGIN\nUPDATE SET paymentStatus=REFUND\nINSERT outbox (ms-notify-payment, amount=priceCharge)\nCOMMIT
+  M --> FE : 200 {status:"REFUND"}
+else
+  M --> FE : 409 "charge is not in a refundable state"
+end
+U -> FE : POST /api/payment/refund {same TX} (retry)
+FE -> M : POST /ms/api/v1/payment/refund
+M --> FE : 409 (validateTransition fails)
+
+footer Lightweight SaaS: 4 containers (postgres+redis+monolith+frontend) vs 11 • TransactionLifecycle Module depth 1→5 • PG outbox replaces Kafka/Mongo/ZK
+
+@enduml

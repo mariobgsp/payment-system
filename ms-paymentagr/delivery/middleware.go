@@ -3,14 +3,13 @@ package delivery
 import (
 	"crypto/hmac"
 	"net/http"
-	"paymentagr/usecase"
 
 	"github.com/gin-gonic/gin"
 )
 
 func RequireApiKey() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		expected := usecase.Config().ApiKey
+		expected := getAdapter().Config().ApiKey
 		if expected == "" {
 			expected = "change-me-api-key"
 		}
