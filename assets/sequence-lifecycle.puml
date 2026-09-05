@@ -1,0 +1,80 @@
+@startuml
+' Payment lifecycle sequence — reflects monolith/cmd + lifecycle + identity code.
+' White background for docs/printing.
+skinparam backgroundColor #FFFFFF
+skinparam defaultBackgroundColor #FFFFFF
+skinparam Shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 13
+skinparam sequence {
+  ArrowColor #1F2937
+  LifeLineBorderColor #374151
+  LifeLineBackgroundColor #F9FAFB
+  ParticipantBorderColor #111827
+  ParticipantBackgroundColor #FFFFFF
+}
+skinparam note {
+  BackgroundColor #F3F4F6
+  BorderColor #D1D5DB
+}
+skinparam title {
+  FontSize 18
+  FontColor #111827
+  BorderThickness 0
+}
+title Payment lifecycle — order → charge → callback → refund\n<small>Monolith :8085 • HMAC callbacks • partner HTTP when configured • idempotent • white background</small>
+
+actor User as U
+participant "Frontend\n:3000" as FE #E0E7FF
+participant "Monolith\n:8085" as M #DBEAFE
+database "PostgreSQL" as PG #FEF3C7
+participant "Partner\n:8081" as PA #D1FAE5
+
+autonumber
+
+== 1 — Order (idempotent) ==
+U -> FE : place order {productCode}
+FE -> M : POST /ms/api/v1/order/product\nIdempotency-Key: <uuid>
+M -> PG : INSERT product_trx CREATED\n+ outbox + idempotency (atomic)
+PG --> M : {transactionId}
+M --> FE : 200 {transactionId}
+note right: same Idempotency-Key\nreturns same transaction
+
+== 2 — Charge (CREATED→READY) ==
+FE -> M : POST /ms/api/v1/payment/create/{type}\n?transaction_id=
+M -> PG : transition → READY + outbox
+alt PARTNER_CHARGE_URL set
+  M -> PA : POST /payments/charge {reference_id}\nHeader: api-key
+  PA --> M : {action.checkout_url}
+  note right: partner error → 502\nfail-closed, no silent fallback
+else dev (unset)
+  M -> M : deterministic /pay/{tx}
+end
+M --> FE : 200 {CheckoutUrl}
+
+== 3 — Callback (READY→SUCCESS, HMAC) ==
+PA -> M : POST /ms/api/v1/payment/notify\n{referenceId, SUCCEEDED}\nx-callback-signature + timestamp
+M -> M : VerifyCallback(secret, ts, body, sig)\nreplay window 300s
+alt invalid signature
+  M --> PA : 401 invalid callback signature
+else valid
+  M -> PG : transition → SUCCESS/PUBLISHED\n+ outbox ms-notify-payment
+  M --> PA : 202 accepted
+end
+
+== 4 — Invoice (outbox, 5s poller) ==
+M -> PG : poll ms-notify-payment
+PG --> M : {transactionId}
+M -> M : invoice.WriteFile →\ninvoice_<tx>.json
+note right: JSON receipt, not Jasper PDF\n(byte-identical PDF dropped\nby owner decision)
+
+== 5 — Refund (SUCCESS→REFUND) ==
+FE -> M : POST /ms/api/v1/payment/refund\n{transactionId}
+M -> PG : transition → REFUND + outbox
+M --> FE : 200 {status: REFUND}
+note right: second refund → 409
+
+== Background — sweeper (60s) ==
+M -> PG : stale READY older than 5m → FAILED
+M -> PG : purge processed servicelogs\nolder than 30d
+@enduml

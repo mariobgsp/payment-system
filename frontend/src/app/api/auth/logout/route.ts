@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { MS_ORDER_URL, buildHeaders, getSession, toEnvelope } from "@/lib/api";
 
 export async function POST(req: NextRequest) {
@@ -15,8 +15,14 @@ export async function POST(req: NextRequest) {
   }
 
   const headers = new Headers();
-  headers.append("Set-Cookie", `ps_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  headers.append(
+    "Set-Cookie",
+    `ps_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
+  );
   headers.append("Set-Cookie", `ps_username=; SameSite=Lax; Path=/; Max-Age=0`);
 
-  return Response.json({ ok: true, data: null, message: "logged out" }, { status: 200, headers });
+  return Response.json(
+    { ok: true, data: null, message: "logged out" },
+    { status: 200, headers },
+  );
 }

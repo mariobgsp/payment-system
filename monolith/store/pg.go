@@ -142,6 +142,31 @@ func (s *PGStore) InsertOutbox(ctx context.Context, ob *Outbox) error {
 	return err
 }
 
+func (s *PGStore) ListRecentLogs(ctx context.Context, limit int) ([]Outbox, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, aggregate_id, topic, payload, created_at FROM transaction.outbox WHERE topic='servicelogs' ORDER BY created_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Outbox
+	for rows.Next() {
+		var o Outbox
+		if err := rows.Scan(&o.ID, &o.AggregateID, &o.Topic, &o.Payload, &o.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *PGStore) PurgeProcessedLogs(ctx context.Context, before time.Time) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM transaction.outbox WHERE topic='servicelogs' AND processed_at IS NOT NULL AND created_at < $1`, before)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (s *PGStore) GetUserDetail(ctx context.Context, username string) (*StoreUser, error) {
 	row := s.pool.QueryRow(ctx, `SELECT id, userid, username, firstname, lastname, email, password, specialproduct, recurring FROM store.store_user WHERE username=$1`, username)
 	var u StoreUser
@@ -157,24 +182,32 @@ func scanProductRow(row interface{ Scan(dest ...any) error }) (Product, error) {
 }
 func (s *PGStore) GetAllProducts(ctx context.Context) ([]Product, error) {
 	rows, err := s.pool.Query(ctx, `SELECT productid, productcode, productname, price, discount, enablediscount, specialproduct, productstatus FROM store.product`)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var out []Product
 	for rows.Next() {
 		p, err := scanProductRow(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
 }
 func (s *PGStore) GetSpecialProducts(ctx context.Context, special bool) ([]Product, error) {
 	rows, err := s.pool.Query(ctx, `SELECT productid, productcode, productname, price, discount, enablediscount, specialproduct, productstatus FROM store.product WHERE specialproduct=$1 AND productstatus=true`, special)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var out []Product
 	for rows.Next() {
 		p, err := scanProductRow(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, p)
 	}
 	return out, rows.Err()

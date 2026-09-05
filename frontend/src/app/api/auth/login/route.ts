@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { MS_ORDER_URL, buildHeaders, toEnvelope } from "@/lib/api";
 
 export async function POST(req: NextRequest) {
@@ -15,18 +15,23 @@ export async function POST(req: NextRequest) {
     });
     const body = await res.json();
     if (!res.ok || body.code !== "00" || !body.data?.token) {
-      return toEnvelope(false, null, body.message ?? "invalid credentials", 401);
+      return toEnvelope(
+        false,
+        null,
+        body.message ?? "invalid credentials",
+        401,
+      );
     }
 
     const user = body.data;
     const headers = new Headers();
     headers.append(
       "Set-Cookie",
-      `ps_token=${user.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${30 * 60}`
+      `ps_token=${user.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${30 * 60}`,
     );
     headers.append(
       "Set-Cookie",
-      `ps_username=${encodeURIComponent(user.username)}; SameSite=Lax; Path=/; Max-Age=${30 * 60}`
+      `ps_username=${encodeURIComponent(user.username)}; SameSite=Lax; Path=/; Max-Age=${30 * 60}`,
     );
 
     return Response.json(
@@ -34,7 +39,7 @@ export async function POST(req: NextRequest) {
       {
         status: 200,
         headers,
-      }
+      },
     );
   } catch (e) {
     return toEnvelope(false, null, (e as Error).message, 500);

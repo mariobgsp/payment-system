@@ -21,9 +21,12 @@ export default function PayPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/order/check?transactionId=${encodeURIComponent(transactionId)}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/order/check?transactionId=${encodeURIComponent(transactionId)}`,
+        {
+          cache: "no-store",
+        },
+      );
       const body = await res.json();
       if (body.ok) {
         setTrx(body.data);
@@ -91,10 +94,10 @@ export default function PayPage() {
         body: JSON.stringify({ transactionId }),
       });
       const body = await res.json();
-      if (!body.ok) {
-        setError(body.message ?? "refund request failed");
-      } else {
+      if (body.ok) {
         pollRef.current = setInterval(fetchStatus, 3000);
+      } else {
+        setError(body.message ?? "refund request failed");
       }
     } catch (err) {
       setError((err as Error).message);
@@ -117,7 +120,9 @@ export default function PayPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Payment</h1>
-          <p className="mt-1 font-mono text-sm text-slate-500">TRX {transactionId}</p>
+          <p className="mt-1 font-mono text-sm text-slate-500">
+            TRX {transactionId}
+          </p>
         </div>
         <button
           className="text-sm text-slate-400 transition hover:text-slate-100"
@@ -128,7 +133,9 @@ export default function PayPage() {
       </div>
 
       {error && (
-        <div className="card border-red-500/30 text-sm text-red-300">{error}</div>
+        <div className="card border-red-500/30 text-sm text-red-300">
+          {error}
+        </div>
       )}
 
       {trx && (
@@ -136,7 +143,9 @@ export default function PayPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-400">{trx.productName}</p>
-              <p className="font-mono text-xs text-slate-500">{trx.productCode}</p>
+              <p className="font-mono text-xs text-slate-500">
+                {trx.productCode}
+              </p>
             </div>
             <span
               className={`rounded-full border px-3 py-1 font-mono text-xs font-semibold ${statusColor[trx.paymentStatus] ?? "bg-slate-500/10 text-slate-300 border-slate-500/30"}`}
@@ -147,15 +156,21 @@ export default function PayPage() {
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <dt className="label">Amount</dt>
-              <dd className="font-mono text-slate-200">{trx.amount} × {formatIdr(trx.price)}</dd>
+              <dd className="font-mono text-slate-200">
+                {trx.amount} × {formatIdr(trx.price)}
+              </dd>
             </div>
             <div>
               <dt className="label">Total charge</dt>
-              <dd className="font-mono text-lg font-semibold text-mint-400">{formatIdr(trx.priceCharge)}</dd>
+              <dd className="font-mono text-lg font-semibold text-mint-400">
+                {formatIdr(trx.priceCharge)}
+              </dd>
             </div>
             <div>
               <dt className="label">Created</dt>
-              <dd className="text-slate-300">{formatDate(trx.sysCreationDate)}</dd>
+              <dd className="text-slate-300">
+                {formatDate(trx.sysCreationDate)}
+              </dd>
             </div>
             <div>
               <dt className="label">Paid at</dt>
@@ -174,17 +189,25 @@ export default function PayPage() {
       {checkoutUrl && (
         <div className="card space-y-4 border-mint-500/20">
           <p className="text-sm text-slate-300">
-            Your payment session is ready. Open the partner payment page to confirm the payment.
+            Your payment session is ready. Open the partner payment page to
+            confirm the payment.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="btn-primary flex-1">
+            <a
+              href={checkoutUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary flex-1"
+            >
               Open payment page
             </a>
             <button className="btn-secondary flex-1" onClick={confirmAndPoll}>
               I&apos;ve completed payment — check status
             </button>
           </div>
-          <p className="break-all font-mono text-xs text-slate-500">{checkoutUrl}</p>
+          <p className="break-all font-mono text-xs text-slate-500">
+            {checkoutUrl}
+          </p>
         </div>
       )}
 
@@ -209,7 +232,11 @@ export default function PayPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary flex-1" disabled={refunding} onClick={refund}>
+            <button
+              className="btn-secondary flex-1"
+              disabled={refunding}
+              onClick={refund}
+            >
               {refunding ? "Requesting…" : "Request refund"}
             </button>
             <a className="btn-secondary flex-1" href="/refund">

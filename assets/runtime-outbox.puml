@@ -1,0 +1,54 @@
+@startuml
+' Outbox runtime — poller routing, DLQ, invoice files, log query + retention.
+' White background for docs/printing.
+skinparam backgroundColor #FFFFFF
+skinparam defaultBackgroundColor #FFFFFF
+skinparam Shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 13
+skinparam activity {
+  BorderColor #111827
+  BackgroundColor #FFFFFF
+  ArrowColor #1F2937
+}
+skinparam title {
+  FontSize 18
+  FontColor #111827
+  BorderThickness 0
+}
+title Outbox runtime — delivery, DLQ, invoice, logs\n<small>Poller 5s • retry 3x backoff • DLQ topic dlq.* (terminal) • white background</small>
+
+start
+:Poller Tick — ListUnprocessedOutbox(50); \nskip dlq.* rows (never redelivered);
+while (more rows?) is (yes)
+  :Send(topic, payload)\nretry 3x: 100ms, 400ms, 1600ms;
+  if (topic?) then (ms-notify-payment)
+    if (INVOICE_URL set?) then (yes)
+      :POST invoice service;\nerror → DLQ;
+    else (no — single binary)
+      :invoice.WriteFile →\n/tmp/invoices/invoice_<tx>.json;\nerror → DLQ;
+    endif
+  else (servicelogs)
+    :stdout log;\nrow stays queryable\nfor GET /v1/logs;
+  endif
+  if (send ok?) then (yes)
+    :MarkOutboxProcessed;
+  else (no — poison)
+    :InsertDLQ (topic dlq.<orig>);\nmark original processed;
+    note right: original never retried again;\nDLQ rows are terminal
+  endif
+endwhile (no)
+stop
+
+' --- log query + retention side flow ---
+newpage Log query + retention (replaces Mongo)
+start
+:GET /v1/logs?limit= (default 50, max 500);
+:ListRecentLogs — newest servicelogs first;
+stop
+
+newpage Retention (sweeper, 60s tick)
+start
+:PurgeProcessedLogs — delete processed\nservicelogs older than LOG_RETENTION_DAYS (30);
+stop
+@enduml

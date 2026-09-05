@@ -8,7 +8,8 @@ export const SESSION_TTL_SECONDS = 30 * 60;
 
 // Single BASE now hides MS_ORDER_URL/MS_PAYMENT_URL split (monolith:8085) — keep legacy exports for compat
 export const MS_ORDER_URL = process.env.MS_ORDER_URL ?? "http://localhost:8080";
-export const MS_PAYMENT_URL = process.env.MS_PAYMENT_URL ?? "http://localhost:8080";
+export const MS_PAYMENT_URL =
+  process.env.MS_PAYMENT_URL ?? "http://localhost:8080";
 export const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 
 export async function getSession() {
@@ -21,11 +22,19 @@ export async function getSession() {
 export const buildHeaders = gwBuildHeaders;
 // proxyFetch now delegates to gateway unwrap (same envelope check {code=="00"}) — single source
 // ponytail: keep proxyFetch name for existing BFF routes, impl via unwrap
-export async function proxyFetch<T>(url: string, init?: RequestInit): Promise<T> {
+export async function proxyFetch<T>(
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
   return unwrap<T>(url, init);
 }
 
-export function toEnvelope<T>(ok: boolean, data: T | null, message: string, status = 200) {
+export function toEnvelope<T>(
+  ok: boolean,
+  data: T | null,
+  message: string,
+  status = 200,
+) {
   return Response.json({ ok, data, message }, { status });
 }
 

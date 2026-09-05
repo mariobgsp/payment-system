@@ -1,0 +1,67 @@
+@startuml
+' MAIN system diagram — Go-only payment-system (Phase 6).
+' White background for docs/printing.
+skinparam backgroundColor #FFFFFF
+skinparam defaultBackgroundColor #FFFFFF
+skinparam Shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 13
+skinparam component {
+  BorderColor #111827
+  BackgroundColor #FFFFFF
+}
+skinparam database {
+  BorderColor #111827
+  BackgroundColor #FFFFFF
+}
+skinparam title {
+  FontSize 18
+  FontColor #111827
+  BorderThickness 0
+}
+title Payment System — Go-only overview (MAIN)\n<small>5 containers: frontend + monolith + ms-paymentagr + postgres + redis • Java/Kafka/Mongo decommissioned</small>
+
+actor User as U
+
+package "Frontend :3000\nNext.js App Router" #E0E7FF {
+  [Web portal] as FE
+}
+
+package "Monolith :8085\nGo single binary" #DBEAFE {
+  [TransactionLifecycle\norder→charge→callback→refund] as LC
+  [Identity\nlogin / HMAC verify] as ID
+  [Invoice worker\noutbox → receipt files] as INV
+  [Jobs\noutbox poller 5s\nsweeper 60s] as JOB
+  [Log API\nGET /v1/logs + retention] as LOG
+  LC -[hidden]d- ID
+  LC -[hidden]d- INV
+  LC -[hidden]d- JOB
+  LC -[hidden]d- LOG
+}
+
+database "PostgreSQL\ntransaction + store" as PG #FEF3C7
+database "Redis\nsessions / partner TTL" as RD #FCE7F3
+
+package "Partner :8081\nms-paymentagr (Go/Gin)" #D1FAE5 {
+  [Charge / Refund\napi-key + signed callbacks] as PA
+}
+
+U --> FE : login, catalog,\norder, pay, refund
+FE --> LC : /ms/api/v1/* compat\nMS_ORDER/PAYMENT_URL
+LC --> PG : product_trx + outbox\n(single DSN, atomic)
+ID --> PG : store_user (BCrypt)
+LC --> PA : charge/refund\n(api-key)
+PA --> LC : signed callback\n(HMAC + replay check)
+JOB --> PG : poll outbox\nsweep stale READY
+INV --> PG : read ms-notify-payment
+INV --> [Invoice files] : invoice_<tx>.json
+LOG --> PG : servicelogs query\n+ purge > 30d
+PA --> RD : charge TTL 5m
+
+note bottom of PG
+  Decommissioned (frozen source, not run):
+  ms-order, ms-payment, ms-invoice,
+  ms-logger, kafka, zookeeper,
+  kafka-ui, mongo
+end note
+@enduml

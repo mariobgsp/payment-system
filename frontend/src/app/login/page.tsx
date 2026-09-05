@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const DEMO_USERS = [
@@ -84,7 +84,11 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full"
+          >
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
@@ -102,7 +106,8 @@ export default function LoginPage() {
                 }}
                 className="rounded-lg border border-ink-600 bg-ink-800 px-3 py-2 text-left font-mono text-xs text-slate-300 transition hover:border-mint-500"
               >
-                {u.username} <span className="text-slate-500">/ {u.password}</span>
+                {u.username}{" "}
+                <span className="text-slate-500">/ {u.password}</span>
               </button>
             ))}
           </div>

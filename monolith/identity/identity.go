@@ -21,9 +21,12 @@ type Clock interface {
 	Now() time.Time
 }
 type SystemClock struct{}
+
 func (SystemClock) Now() time.Time { return time.Now() }
+
 type FakeClock struct{ T time.Time }
-func (f *FakeClock) Now() time.Time { return f.T }
+
+func (f *FakeClock) Now() time.Time          { return f.T }
 func (f *FakeClock) Advance(d time.Duration) { f.T = f.T.Add(d) }
 
 // Session mirrors store user session
@@ -58,11 +61,21 @@ func (id *Identity) StoreUser(ctx context.Context, username string) (*store.Stor
 	return id.store.GetUserDetail(ctx, username)
 }
 func NewIdentity(s store.Store, ttl time.Duration, maxAttempts int, window time.Duration, tolerance time.Duration, clock Clock, secretKey string) *Identity {
-	if ttl == 0 { ttl = 1800 * time.Second }
-	if maxAttempts == 0 { maxAttempts = 10 }
-	if window == 0 { window = 15 * time.Minute }
-	if tolerance == 0 { tolerance = 300 * time.Second }
-	if clock == nil { clock = SystemClock{} }
+	if ttl == 0 {
+		ttl = 1800 * time.Second
+	}
+	if maxAttempts == 0 {
+		maxAttempts = 10
+	}
+	if window == 0 {
+		window = 15 * time.Minute
+	}
+	if tolerance == 0 {
+		tolerance = 300 * time.Second
+	}
+	if clock == nil {
+		clock = SystemClock{}
+	}
 	id := &Identity{
 		store: s, secretKey: secretKey,
 		ttl: ttl, maxAttempts: maxAttempts, window: window, tolerance: tolerance, clock: clock,
@@ -226,7 +239,11 @@ var (
 	ErrTooManyAttempts    = &ApiError{Code: 429, Msg: "too many login attempts, try again later"}
 )
 
-type ApiError struct{ Code int; Msg string }
+type ApiError struct {
+	Code int
+	Msg  string
+}
+
 func (e *ApiError) Error() string { return e.Msg }
 
 func (id *Identity) allowAttempt(key string) bool {

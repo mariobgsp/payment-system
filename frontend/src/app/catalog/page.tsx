@@ -73,7 +73,7 @@ export default function CatalogPage() {
       }
       sessionStorage.setItem(
         `order_${body.data.transactionId}`,
-        JSON.stringify({ ...draft, productName: draft.product.productName })
+        JSON.stringify({ ...draft, productName: draft.product.productName }),
       );
       router.push(`/pay/${body.data.transactionId}`);
     } catch (err) {
@@ -93,7 +93,9 @@ export default function CatalogPage() {
 
   if (error) {
     return (
-      <div className="card mx-auto mt-16 max-w-md border-red-500/30 text-red-300">{error}</div>
+      <div className="card mx-auto mt-16 max-w-md border-red-500/30 text-red-300">
+        {error}
+      </div>
     );
   }
 
@@ -101,9 +103,12 @@ export default function CatalogPage() {
     <div>
       <div className="mb-8 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Product catalog</h1>
+          <h1 className="text-2xl font-semibold text-slate-100">
+            Product catalog
+          </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Select a product, choose quantity and place an order to start the payment flow.
+            Select a product, choose quantity and place an order to start the
+            payment flow.
           </p>
         </div>
       </div>
@@ -114,7 +119,9 @@ export default function CatalogPage() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="font-medium text-slate-100">{p.productName}</h3>
-                <p className="mt-0.5 font-mono text-xs text-slate-500">{p.productCode}</p>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">
+                  {p.productCode}
+                </p>
               </div>
               {p.discountAvailable && (
                 <span className="rounded-full bg-mint-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-mint-400">
@@ -133,7 +140,13 @@ export default function CatalogPage() {
               <button
                 className="btn-secondary px-3 py-1.5"
                 disabled={placing}
-                onClick={() => setDraft({ product: p, amount: 1, enableDiscount: p.discountAvailable })}
+                onClick={() =>
+                  setDraft({
+                    product: p,
+                    amount: 1,
+                    enableDiscount: p.discountAvailable,
+                  })
+                }
               >
                 Order
               </button>
@@ -143,14 +156,27 @@ export default function CatalogPage() {
       </div>
 
       {draft && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" onClick={() => setDraft(null)}>
-          <div className="card w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setDraft(null)}
+        >
+          <div
+            className="card w-full max-w-md space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-100">Place order</h2>
-                <p className="mt-0.5 font-mono text-xs text-slate-500">{draft.product.productCode}</p>
+                <h2 className="text-lg font-semibold text-slate-100">
+                  Place order
+                </h2>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">
+                  {draft.product.productCode}
+                </p>
               </div>
-              <button className="text-slate-500 hover:text-slate-200" onClick={() => setDraft(null)}>
+              <button
+                className="text-slate-500 hover:text-slate-200"
+                onClick={() => setDraft(null)}
+              >
                 ✕
               </button>
             </div>
@@ -164,7 +190,12 @@ export default function CatalogPage() {
                   max={100}
                   className="input"
                   value={draft.amount}
-                  onChange={(e) => setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) })}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      amount: Math.max(1, Number(e.target.value) || 1),
+                    })
+                  }
                 />
               </div>
 
@@ -176,7 +207,9 @@ export default function CatalogPage() {
                   <input
                     type="checkbox"
                     checked={draft.enableDiscount}
-                    onChange={(e) => setDraft({ ...draft, enableDiscount: e.target.checked })}
+                    onChange={(e) =>
+                      setDraft({ ...draft, enableDiscount: e.target.checked })
+                    }
                     className="h-4 w-4 accent-mint-500"
                   />
                 </label>
@@ -185,7 +218,13 @@ export default function CatalogPage() {
               <div className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900 px-3 py-2.5">
                 <span className="text-sm text-slate-400">Total</span>
                 <span className="font-mono text-lg font-semibold text-mint-400">
-                  {formatIdr(totalPrice(draft.product, draft.amount, draft.enableDiscount))}
+                  {formatIdr(
+                    totalPrice(
+                      draft.product,
+                      draft.amount,
+                      draft.enableDiscount,
+                    ),
+                  )}
                 </span>
               </div>
 
@@ -195,8 +234,14 @@ export default function CatalogPage() {
                 </div>
               )}
 
-              <button className="btn-primary w-full" disabled={placing} onClick={placeOrder}>
-                {placing ? "Placing order…" : "Place order & continue to payment"}
+              <button
+                className="btn-primary w-full"
+                disabled={placing}
+                onClick={placeOrder}
+              >
+                {placing
+                  ? "Placing order…"
+                  : "Place order & continue to payment"}
               </button>
             </div>
           </div>

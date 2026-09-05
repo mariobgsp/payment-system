@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function RefundPage() {
@@ -22,11 +22,11 @@ export default function RefundPage() {
         body: JSON.stringify({ transactionId }),
       });
       const body = await res.json();
-      if (!body.ok) {
-        setError(body.message ?? "refund request failed");
-      } else {
+      if (body.ok) {
         setResult(`Refund accepted for transaction ${transactionId}.`);
         setTransactionId("");
+      } else {
+        setError(body.message ?? "refund request failed");
       }
     } catch (err) {
       setError((err as Error).message);
@@ -71,7 +71,11 @@ export default function RefundPage() {
             </div>
           )}
 
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full"
+          >
             {loading ? "Requesting…" : "Request refund"}
           </button>
           <button

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"payment-system/monolith/identity"
+	"payment-system/monolith/invoice"
 	"payment-system/monolith/jobs"
 	"payment-system/monolith/lifecycle"
 	"payment-system/monolith/store"
@@ -36,22 +40,28 @@ func main() {
 	mux.HandleFunc("GET /v1/order/{id}/check", handleCheck(svc))
 	mux.HandleFunc("POST /v1/payment/charge", handleCharge(svc))
 	mux.HandleFunc("POST /v1/payment/refund", handleRefund(svc))
-	mux.HandleFunc("POST /v1/payment/notify", handleNotify(svc))
+	mux.HandleFunc("POST /v1/payment/notify", handleNotify(svc, idSvc))
+	mux.HandleFunc("GET /v1/logs", handleLogs(s))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		w.Write([]byte(`{"status":"ok","code":"00"}`))
 	})
 	// legacy ms-* compat — so frontend can point MS_ORDER_URL/MS_PAYMENT_URL to monolith without code change
 	mux.HandleFunc("POST /ms/api/v1/auth/login", handleLegacyLogin(idSvc))
-	mux.HandleFunc("POST /ms/api/v1/auth/logout", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "logged-out"}) })
+	mux.HandleFunc("POST /ms/api/v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "logged-out"})
+	})
 	mux.HandleFunc("GET /ms/api/v1/view/product", handleLegacyViewProduct(s))
 	mux.HandleFunc("GET /ms/api/v1/{username}/user-detail", handleLegacyUserDetail(s))
 	mux.HandleFunc("POST /ms/api/v1/order/product", handleLegacyOrderProduct(svc, s))
 	mux.HandleFunc("GET /ms/api/v1/order/{id}/check", handleLegacyOrderCheck(svc))
 	mux.HandleFunc("POST /ms/api/v1/payment/create/{type}", handleLegacyPaymentCreate(svc))
 	mux.HandleFunc("POST /ms/api/v1/payment/refund", handleLegacyRefund(svc))
-	mux.HandleFunc("POST /ms/api/v1/payment/notify", handleNotify(svc))
-	mux.HandleFunc("GET /ms/api/v1/health/check", func(w http.ResponseWriter, _ *http.Request) { w.Header().Set("content-type", "application/json"); w.Write([]byte(`{"status":"ok","code":"00"}`)) })
+	mux.HandleFunc("POST /ms/api/v1/payment/notify", handleNotify(svc, idSvc))
+	mux.HandleFunc("GET /ms/api/v1/health/check", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		w.Write([]byte(`{"status":"ok","code":"00"}`))
+	})
 
 	// jobs — sweeper + outbox poller (internal seams, not at external Interface)
 	go runSweeper(ctx, s)
@@ -102,19 +112,64 @@ func runSweeper(ctx context.Context, s store.Store) {
 			if n > 0 {
 				log.Printf("sweeper: %d stale READY→FAILED", n)
 			}
+			if days := envInt("LOG_RETENTION_DAYS", 30); days > 0 {
+				if purged, _ := s.PurgeProcessedLogs(ctx, time.Now().Add(-time.Duration(days)*24*time.Hour)); purged > 0 {
+					log.Printf("sweeper: purged %d old servicelogs", purged)
+				}
+			}
 		}
 	}
 }
 
 func runOutboxPoller(ctx context.Context, s store.Store) {
-	sender := &logSender{}
-	poller := &jobs.Poller{Store: s, Send: sender}
+	sender := &routeSender{store: s}
+	poller := &jobs.Poller{Store: s, Send: sender, DLQStore: &dlqOutbox{store: s}}
 	poller.Loop(ctx, 5*time.Second)
 }
 
-type logSender struct{}
+// dlqOutbox reuses the outbox table (topic=dlq.<orig>) — no schema change.
+// ponytail: split to dedicated table if DLQ volume matters.
+type dlqOutbox struct{ store store.Store }
 
-func (l *logSender) Send(_ context.Context, topic string, payload []byte) error {
+func (d *dlqOutbox) InsertDLQ(ctx context.Context, ob store.Outbox, lastErr string) error {
+	return d.store.InsertOutbox(ctx, &store.Outbox{
+		ID:          ob.ID + "-dlq",
+		AggregateID: ob.AggregateID,
+		Topic:       "dlq." + ob.Topic,
+		Payload:     []byte(`{"orig":"` + ob.ID + `","err":"` + lastErr + `"}`),
+		CreatedAt:   time.Now(),
+	})
+}
+
+// routeSender is the real outbox transport: ms-notify-payment → INVOICE_URL (when set)
+// else local invoice file (single-binary mode); servicelogs → stdout (Phase 5 adds query API).
+type routeSender struct{ store store.Store }
+
+func (l *routeSender) Send(ctx context.Context, topic string, payload []byte) error {
+	if topic == "ms-notify-payment" {
+		if url := os.Getenv("INVOICE_URL"); url != "" {
+			req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				raw, _ := io.ReadAll(resp.Body)
+				return fmt.Errorf("invoice %d: %s", resp.StatusCode, string(raw))
+			}
+			return nil
+		}
+		if l.store != nil {
+			path, err := invoice.WriteFile(ctx, l.store, payload, os.Getenv("INVOICE_DIR"))
+			if err != nil {
+				return err
+			}
+			log.Printf("invoice wrote %s", path)
+			return nil
+		}
+	}
 	log.Printf("outbox send topic=%s payload=%s", topic, string(payload))
 	return nil
 }
@@ -165,6 +220,14 @@ func handleCharge(svc *lifecycle.Service) http.HandlerFunc {
 			writeErr(w, err)
 			return
 		}
+		if trx, _ := svc.Store().FindTxForUpdate(r.Context(), body.TransactionID); trx != nil {
+			if url, perr := partnerChargeURL(r.Context(), body.TransactionID, trx.PriceCharge, r.URL.Query().Get("method")); perr != nil {
+				writeJSON(w, 502, map[string]any{"code": "99", "status": "failed", "message": perr.Error()})
+				return
+			} else if url != "" {
+				rs.CheckoutURL = url
+			}
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "data": rs})
 	}
 }
@@ -200,21 +263,38 @@ func handleCheck(svc *lifecycle.Service) http.HandlerFunc {
 			id = strings.TrimSuffix(id, "/check")
 		}
 		caller := r.Header.Get("x-user-id")
-		if caller == "" { caller = r.URL.Query().Get("username") }
-		if caller == "" { caller = "anonymous" }
+		if caller == "" {
+			caller = r.URL.Query().Get("username")
+		}
+		if caller == "" {
+			caller = "anonymous"
+		}
 		if caller != "anonymous" {
-			if u, err := svc.Store().GetUserDetail(r.Context(), caller); err == nil { caller = u.UserID }
+			if u, err := svc.Store().GetUserDetail(r.Context(), caller); err == nil {
+				caller = u.UserID
+			}
 		}
 		trx, err := svc.Check(r.Context(), id, caller)
-		if err != nil { writeErr(w, err); return }
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "data": trx})
 	}
 }
 
-func handleNotify(svc *lifecycle.Service) http.HandlerFunc {
+func handleNotify(svc *lifecycle.Service, idSvc *identity.Identity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		// ponytail: verify HMAC+replay when NOTIFY_SECRET set; open in dev (secret empty) so local tests stay green
+		if secret := os.Getenv("NOTIFY_SECRET"); secret != "" {
+			if !idSvc.VerifyCallback(secret, r.Header.Get("x-callback-timestamp"), string(raw), r.Header.Get("x-callback-signature")) {
+				writeJSON(w, 401, map[string]any{"code": "41", "status": "failed", "message": "invalid callback signature"})
+				return
+			}
+		}
 		var evt lifecycle.CallbackEvt
-		if err := json.NewDecoder(r.Body).Decode(&evt); err != nil {
+		if err := json.Unmarshal(raw, &evt); err != nil {
 			writeErr(w, lifecycle.NewBadRequest("invalid callback"))
 			return
 		}
@@ -226,25 +306,69 @@ func handleNotify(svc *lifecycle.Service) http.HandlerFunc {
 	}
 }
 
+// partnerChargeURL calls ms-paymentagr when PARTNER_CHARGE_URL is set (prod), else "" (dev deterministic URL).
+// Fail-closed: partner error → caller surfaces 502, never silent fallback.
+func partnerChargeURL(ctx context.Context, txID string, amount int64, method string) (string, error) {
+	base := os.Getenv("PARTNER_CHARGE_URL")
+	if base == "" {
+		return "", nil
+	}
+	if method == "" {
+		method = "SHOPEEPAY"
+	}
+	body, _ := json.Marshal(map[string]any{"reference_id": txID, "currency": "IDR", "checkout_method": method, "amount": amount, "payment_code": method, "redirect_url": os.Getenv("FRONTEND_URL"), "callback_url": os.Getenv("MONOLITH_PUBLIC_URL")})
+	req, _ := http.NewRequestWithContext(ctx, "POST", base, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if k := os.Getenv("PARTNER_API_KEY"); k != "" {
+		req.Header.Set("api-key", k)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("partner charge %d: %s", resp.StatusCode, string(raw))
+	}
+	var rs struct {
+		Action *struct {
+			CheckoutURL string `json:"checkout_url"`
+		} `json:"action"`
+		CheckoutURL string `json:"checkoutUrl"`
+	}
+	_ = json.Unmarshal(raw, &rs)
+	if rs.Action != nil && rs.Action.CheckoutURL != "" {
+		return rs.Action.CheckoutURL, nil
+	}
+	return rs.CheckoutURL, nil
+}
+
 // --- legacy compat handlers — thin adapters to keep frontend BFF unchanged when MS_ORDER_URL points to monolith ---
 func handleLegacyLogin(id *identity.Identity) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Username, Password string }
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Username == "" || body.Password == "" {
-			writeJSON(w, 400, map[string]any{"code": "03", "status": "failed", "message": "Invalid value should not be empty"}); return
+			writeJSON(w, 400, map[string]any{"code": "03", "status": "failed", "message": "Invalid value should not be empty"})
+			return
 		}
 		clientIP := r.RemoteAddr
-		if ip := r.Header.Get("X-Forwarded-For"); ip != "" { clientIP = strings.Split(ip, ",")[0] }
+		if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+			clientIP = strings.Split(ip, ",")[0]
+		}
 		sess, err := id.Login(r.Context(), body.Username, body.Password, clientIP)
 		if err != nil {
 			if err == identity.ErrTooManyAttempts {
-				writeJSON(w, 429, map[string]any{"code": "40", "status": "failed", "message": "Too many login attempts, try again later"}); return
+				writeJSON(w, 429, map[string]any{"code": "40", "status": "failed", "message": "Too many login attempts, try again later"})
+				return
 			}
-			writeJSON(w, 401, map[string]any{"code": "01", "status": "failed", "message": "Invalid username or password"}); return
+			writeJSON(w, 401, map[string]any{"code": "01", "status": "failed", "message": "Invalid username or password"})
+			return
 		}
 		u, _ := id.StoreUser(r.Context(), body.Username)
 		if u == nil {
-			writeJSON(w, 500, map[string]any{"code": "99", "status": "failed", "message": "user not found"}); return
+			writeJSON(w, 500, map[string]any{"code": "99", "status": "failed", "message": "user not found"})
+			return
 		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": map[string]any{
 			"id": u.ID, "userId": u.UserID, "username": u.Username, "firstName": u.FirstName, "lastName": u.LastName, "email": u.Email, "specialProduct": u.SpecialProduct, "recurring": u.Recurring, "token": sess.Token,
@@ -254,27 +378,47 @@ func handleLegacyLogin(id *identity.Identity) http.HandlerFunc {
 func handleLegacyViewProduct(s store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.URL.Query().Get("username")
-		if username == "" { writeJSON(w, 400, map[string]any{"code": "03", "status": "failed", "message": "username required"}); return }
+		if username == "" {
+			writeJSON(w, 400, map[string]any{"code": "03", "status": "failed", "message": "username required"})
+			return
+		}
 		u, err := s.GetUserDetail(r.Context(), username)
-		if err != nil { writeJSON(w, 404, map[string]any{"code": "01", "status": "failed", "message": "User not allowed"}); return }
+		if err != nil {
+			writeJSON(w, 404, map[string]any{"code": "01", "status": "failed", "message": "User not allowed"})
+			return
+		}
 		var prods []store.Product
-		if u.SpecialProduct { prods, _ = s.GetAllProducts(r.Context()) } else { prods, _ = s.GetSpecialProducts(r.Context(), false) }
+		if u.SpecialProduct {
+			prods, _ = s.GetAllProducts(r.Context())
+		} else {
+			prods, _ = s.GetSpecialProducts(r.Context(), false)
+		}
 		// map to frontend shape
 		var out []map[string]any
 		for _, p := range prods {
-			if !p.ProductStatus { continue }
+			if !p.ProductStatus {
+				continue
+			}
 			out = append(out, map[string]any{"productCode": p.ProductCode, "productName": p.ProductName, "price": p.Price, "discount": p.Discount, "discountAvailable": p.EnableDiscount, "productUpdateDate": "", "productInsertDate": ""})
 		}
-		if out == nil { out = []map[string]any{} }
+		if out == nil {
+			out = []map[string]any{}
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": out})
 	}
 }
 func handleLegacyUserDetail(s store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
-		if username == "" { username = strings.TrimPrefix(r.URL.Path, "/ms/api/v1/"); username = strings.TrimSuffix(username, "/user-detail") }
+		if username == "" {
+			username = strings.TrimPrefix(r.URL.Path, "/ms/api/v1/")
+			username = strings.TrimSuffix(username, "/user-detail")
+		}
 		u, err := s.GetUserDetail(r.Context(), username)
-		if err != nil { writeJSON(w, 404, map[string]any{"code": "01", "status": "failed", "message": "User not exist"}); return }
+		if err != nil {
+			writeJSON(w, 404, map[string]any{"code": "01", "status": "failed", "message": "User not exist"})
+			return
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": map[string]any{"id": u.ID, "userId": u.UserID, "username": u.Username, "firstName": u.FirstName, "lastName": u.LastName, "email": u.Email, "specialProduct": u.SpecialProduct, "recurring": u.Recurring}})
 	}
 }
@@ -282,25 +426,39 @@ func handleLegacyOrderProduct(svc *lifecycle.Service, s store.Store) http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.URL.Query().Get("username")
 		var body struct {
-			ProductCode   string `json:"productCode"`
-			ProductName   string `json:"productName"`
-			Amount        int64  `json:"amount"`
-			Price         int64  `json:"price"`
-			EnableDiscount bool  `json:"enableDiscount"`
-			UserDetail struct{ Username string `json:"username"` } `json:"userDetail"`
+			ProductCode    string `json:"productCode"`
+			ProductName    string `json:"productName"`
+			Amount         int64  `json:"amount"`
+			Price          int64  `json:"price"`
+			EnableDiscount bool   `json:"enableDiscount"`
+			UserDetail     struct {
+				Username string `json:"username"`
+			} `json:"userDetail"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if username == "" { username = body.UserDetail.Username }
-		if username == "" || body.ProductCode == "" { writeJSON(w, 400, map[string]any{"code": "03", "status": "failed", "message": "Invalid value should not be empty"}); return }
+		if username == "" {
+			username = body.UserDetail.Username
+		}
+		if username == "" || body.ProductCode == "" {
+			writeJSON(w, 400, map[string]any{"code": "03", "status": "failed", "message": "Invalid value should not be empty"})
+			return
+		}
 		prod, _ := s.GetSingleProduct(r.Context(), body.ProductCode)
 		discount := 0.0
-		if prod != nil { discount = prod.Discount }
+		if prod != nil {
+			discount = prod.Discount
+		}
 		u, _ := s.GetUserDetail(r.Context(), username)
 		userID := ""
-		if u != nil { userID = u.UserID }
+		if u != nil {
+			userID = u.UserID
+		}
 		cmd := lifecycle.CreateCmd{Username: username, UserID: userID, ProductCode: body.ProductCode, ProductName: body.ProductName, Price: body.Price, Amount: body.Amount, EnableDiscount: body.EnableDiscount, Discount: discount}
 		trx, err := svc.CreateOrder(r.Context(), cmd, r.Header.Get("Idempotency-Key"))
-		if err != nil { writeErr(w, err); return }
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": map[string]any{"transactionId": trx.TransactionID, "createdAt": trx.SysCreationDate}})
 	}
 }
@@ -309,14 +467,24 @@ func handleLegacyOrderCheck(svc *lifecycle.Service) http.HandlerFunc {
 		id := r.PathValue("id")
 		if id == "" {
 			parts := strings.Split(r.URL.Path, "/")
-			for i, p := range parts { if p == "order" && i+1 < len(parts) { id = parts[i+1]; break } }
+			for i, p := range parts {
+				if p == "order" && i+1 < len(parts) {
+					id = parts[i+1]
+					break
+				}
+			}
 		}
 		username := r.URL.Query().Get("username")
 		// resolve username -> userId for authz (store holds userId)
 		caller := username
-		if u, err := svc.Store().GetUserDetail(r.Context(), username); err == nil { caller = u.UserID }
+		if u, err := svc.Store().GetUserDetail(r.Context(), username); err == nil {
+			caller = u.UserID
+		}
 		trx, err := svc.Check(r.Context(), id, caller)
-		if err != nil { writeErr(w, err); return }
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": []any{trx}})
 	}
 }
@@ -325,24 +493,45 @@ func handleLegacyPaymentCreate(svc *lifecycle.Service) http.HandlerFunc {
 		typeStr := r.PathValue("type")
 		_ = typeStr
 		txID := r.URL.Query().Get("transaction_id")
-		if txID == "" { txID = r.URL.Query().Get("transactionId") }
-		// frontend sends callbackUrl in body, ignore for monolith — checkoutUrl is deterministic
+		if txID == "" {
+			txID = r.URL.Query().Get("transactionId")
+		}
+		// frontend sends callbackUrl in body, ignore for monolith — partner URL when configured, else deterministic
 		rs, err := svc.Charge(r.Context(), txID)
-		if err != nil { writeErr(w, err); return }
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if trx, _ := svc.Store().FindTxForUpdate(r.Context(), txID); trx != nil {
+			if url, perr := partnerChargeURL(r.Context(), txID, trx.PriceCharge, typeStr); perr != nil {
+				writeJSON(w, 502, map[string]any{"code": "99", "status": "failed", "message": perr.Error()})
+				return
+			} else if url != "" {
+				rs.CheckoutURL = url
+			}
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": map[string]any{"CheckoutUrl": rs.CheckoutURL}})
 	}
 }
 func handleLegacyRefund(svc *lifecycle.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var body struct{ TransactionId string `json:"transactionId"`; TransactionID2 string `json:"transaction_id"` }
+		var body struct {
+			TransactionId  string `json:"transactionId"`
+			TransactionID2 string `json:"transaction_id"`
+		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		txID := body.TransactionId
-		if txID == "" { txID = body.TransactionID2 }
+		if txID == "" {
+			txID = body.TransactionID2
+		}
 		if txID == "" { // try query
 			txID = r.URL.Query().Get("transaction_id")
 		}
 		rs, err := svc.Refund(r.Context(), txID)
-		if err != nil { writeErr(w, err); return }
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "message": "request-success", "data": rs})
 	}
 }
@@ -386,4 +575,35 @@ func env(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func envInt(k string, def int) int {
+	if v := os.Getenv(k); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+// handleLogs replaces Mongo ServiceLog reads: recent servicelogs outbox rows, newest first.
+func handleLogs(s store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := envInt("LOG_PAGE_LIMIT", 50)
+		if q := r.URL.Query().Get("limit"); q != "" {
+			if _, err := fmt.Sscanf(q, "%d", &limit); err != nil || limit <= 0 || limit > 500 {
+				limit = 50
+			}
+		}
+		logs, err := s.ListRecentLogs(r.Context(), limit)
+		if err != nil {
+			writeJSON(w, 500, map[string]any{"code": "99", "status": "failed", "message": err.Error()})
+			return
+		}
+		if logs == nil {
+			logs = []store.Outbox{}
+		}
+		writeJSON(w, 200, map[string]any{"code": "00", "status": "ok", "data": logs})
+	}
 }

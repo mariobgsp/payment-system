@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"payment-system/monolith/store"
@@ -31,6 +32,9 @@ func (p *Poller) Tick(ctx context.Context) (processed, dlq int) {
 		return 0, 0
 	}
 	for _, ob := range batch {
+		if strings.HasPrefix(ob.Topic, "dlq.") {
+			continue // terminal DLQ rows are never redelivered
+		}
 		if err := p.sendWithRetry(ctx, ob); err != nil {
 			if p.DLQStore != nil {
 				_ = p.DLQStore.InsertDLQ(ctx, ob, err.Error())

@@ -156,6 +156,7 @@ type FakeSent struct {
 	Signature string
 	Timestamp string
 }
+
 func (f *FakeNotifier) Send(_ context.Context, payload []byte, signature, timestamp string) error {
 	f.Sent = append(f.Sent, FakeSent{Payload: payload, Signature: signature, Timestamp: timestamp})
 	return nil

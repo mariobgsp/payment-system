@@ -40,7 +40,7 @@ type Service struct {
 // Store aliases internal seam for test injectability (Local-substitutable).
 type Store = store.Store
 
-func New(s Store) *Service { return &Service{store: s} }
+func New(s Store) *Service      { return &Service{store: s} }
 func (s *Service) Store() Store { return s.store }
 
 // Status constants — G25: replace magic numbers/strings
@@ -59,9 +59,9 @@ type IdempotencyKey string
 
 // Data Clumps: bundle product/user refs
 type ProductRef struct {
-	Code, Name string
-	Price      int64
-	Discount   float64
+	Code, Name     string
+	Price          int64
+	Discount       float64
 	EnableDiscount bool
 }
 type UserRef struct {
@@ -101,9 +101,9 @@ type RefundRs struct {
 
 // state chart — uses named constants, G25 fix
 var transitions = map[string]map[string]string{
-	StatusCreated: {"charge": StatusReady},
-	StatusReady:   {"callback_success": StatusSuccess, "callback_failed": StatusFailed, "timeout": StatusFailed},
-	StatusSuccess: {"refund": StatusRefund},
+	StatusCreated:   {"charge": StatusReady},
+	StatusReady:     {"callback_success": StatusSuccess, "callback_failed": StatusFailed, "timeout": StatusFailed},
+	StatusSuccess:   {"refund": StatusRefund},
 	StatusPublished: {"refund": StatusRefund},
 }
 

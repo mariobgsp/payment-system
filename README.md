@@ -2,40 +2,46 @@
 
 ## Overview
 
-Microservices-based payment system with a modern web frontend — now with a low-cost **Go monolith** option (`monolith/`) that deepens the scattered payment lifecycle into a single `TransactionLifecycle` Module.
+Go payment system with a modern web frontend — the **Go monolith** (`monolith/`) deepens the payment lifecycle into a single `TransactionLifecycle` Module. Java services are decommissioned (frozen source, not run).
 
 * **frontend** - Next.js (App Router) web portal: login, product catalog, order placement, payment checkout, status tracking and refunds
-* **monolith** - **Go (new, recommended for SaaS)** — `TransactionLifecycle` deep Module: order → charge → callback → refund, idempotency, authz, pricing, outbox + sweeper. Single binary, PG `transaction` + `store` schemas, Redis. Replaces `ms-order` + `ms-payment` + Kafka/Mongo for low-cost deploys
-* **ms-order** - Java/Spring (legacy): user auth (session tokens), product inquiry and order creation
-* **ms-payment** - Java/Spring (legacy): payment creation, refunds and secure payment callbacks
-* **ms-paymentagr** - Go/Gin + Redis: dummy payment partner (charge, refund, redirect/checkout page)
-* **ms-invoice** - Java/Spring: consumes payment events from Kafka and provisions PDF invoice reports (monolith uses outbox instead)
-* **ms-logger** - Java/Spring: consumes the `ms-event-log` topic and persists service logs to MongoDB (monolith logs to stdout → PG outbox)
+* **monolith** - **Go (primary)** — `TransactionLifecycle` deep Module: order → charge → callback → refund, idempotency, authz, pricing, HMAC-verified callbacks, partner charge via `api-key`, invoice worker (outbox → receipt files), log query API (`GET /v1/logs`) + retention, outbox poller with DLQ + sweeper. Single binary, PG `transaction` + `store` schemas, Redis
+* **ms-paymentagr** - Go/Gin + Redis: dummy payment partner (charge, refund, redirect/checkout page, HMAC-signed callbacks)
+* **ms-order / ms-payment / ms-invoice / ms-logger** - Java/Spring (decommissioned): frozen source kept for audit; replaced by monolith + PG outbox. Kafka/Mongo/ZK removed from compose
 
 ## Architecture Diagrams
 
-> Rendered from PlantUML (`assets/sequence-monolith.puml`) with **white background** (`skinparam backgroundColor #FFFFFF`) for docs/printing.
+> PlantUML sources with **white background** (`skinparam backgroundColor #FFFFFF`) for docs/printing. Render with `docker run --rm -v "$(pwd)/assets:/data" plantuml/plantuml /data/'*.puml' -tpng`.
 
-**Legacy microservices** — original design:
+**1 — System overview (MAIN)** — all 5 containers and how they connect (frontend → monolith → postgres/redis/partner; outbox → invoice files; logs query):
 
-![Architecture - legacy microservices](payment-system-diagram.jpg)
+![System overview (MAIN)](assets/system-main.png)
 
-**Monolith TransactionLifecycle — low-cost SaaS (Go, 4 containers)** — deep Module `TransactionLifecycle` owns state chart `CREATED→READY→SUCCESS→REFUND`, pricing, idempotency (`Idempotency-Key`), authz (`username→userId`), outbox (replaces Kafka/Mongo), sweeper (stale `READY→FAILED` after 5m):
+Source: [`assets/system-main.puml`](assets/system-main.puml)
 
-![Sequence — Monolith TransactionLifecycle (white background)](assets/sequence-monolith.png)
+**2 — Payment lifecycle sequence** — order → charge → HMAC callback → invoice → refund, plus sweeper/retention background work:
 
-Source: [`assets/sequence-monolith.puml`](assets/sequence-monolith.puml) — re-render with `docker run --rm -v "$(pwd)/assets:/data" plantuml/plantuml /data/sequence-monolith.puml -tpng`
+![Payment lifecycle sequence](assets/sequence-lifecycle.png)
+
+Source: [`assets/sequence-lifecycle.puml`](assets/sequence-lifecycle.puml)
+
+**3 — Outbox runtime** — poller routing, 3x retry + DLQ, invoice files, log query + retention (the Kafka/Mongo replacement):
+
+![Outbox runtime](assets/runtime-outbox.png)
+
+Source: [`assets/runtime-outbox.puml`](assets/runtime-outbox.puml)
+
+Legacy references: `payment-system-diagram.jpg` (original Java microservices), `assets/sequence-monolith.puml/png` (earlier monolith draft), `assets/simple-order-ms.txt`.
 
 ## Tech Stack
 
-* **Go 1.25 monolith** - `TransactionLifecycle` deep Module (recommended for SaaS): `net/http` stdlib, `pgx` + PG outbox/idempotency, sweeper + poller, white-background PlantUML docs
-* Java Spring Boot 17 - legacy (ms-order, ms-payment, ms-logger, ms-invoice)
-* PostgreSQL - `transaction` + `store` schemas (monolith single-DSN) and legacy `ms` DB
-* MongoDB - service log storage (legacy ms-logger; monolith uses PG outbox + stdout)
-* Kafka - event streaming between legacy services (monolith replaces with PG outbox)
+* **Go monolith** - `TransactionLifecycle` deep Module: `net/http` stdlib, `pgx` + PG outbox/idempotency, HMAC callback verify, partner charge via `api-key`, invoice worker, log query + retention, poller with DLQ + sweeper, white-background PlantUML docs
 * Go + Gin + Redis - ms-paymentagr (payment partner simulation)
-* Next.js 16 + TypeScript + Tailwind CSS - web frontend (wired to `monolith:8085` when `MS_ORDER_URL`/`MS_PAYMENT_URL` point to monolith)
-* Docker Compose - full-stack or minimal `postgres+redis+monolith+frontend` (4 containers, −60% RAM vs 11)
+* PostgreSQL - `transaction` + `store` schemas (monolith single-DSN) and `partner` DB
+* Redis - sessions / partner TTL
+* Next.js 16 + TypeScript + Tailwind CSS - web frontend (pointed at `monolith:8085`)
+* Docker Compose - 5 containers (`postgres+redis+ms-paymentagr+monolith+frontend`)
+* Java Spring Boot 17 - decommissioned (`ms-order`, `ms-payment`, `ms-logger`, `ms-invoice` frozen, not run); Kafka/Mongo/ZK removed
 
 ## Getting Started
 
@@ -55,26 +61,18 @@ cp .env.example .env
 ### 3. Build and start all services
 
 ```bash
-# Minimal low-cost stack (recommended): postgres + redis + monolith + frontend — 4 containers
+# Go-only stack: postgres + redis + ms-paymentagr + monolith + frontend — 5 containers
 # Seeds PostgreSQL (store + transaction schemas + outbox/idempotency + demo users/products) on first boot
-cd project && docker compose up --build postgres redis monolith frontend
-
-# Full legacy stack (11 containers) — still works for comparison
-# docker compose up --build
+cd project && docker compose up --build
 ```
 
 This seeds PostgreSQL (schemas + demo users/products) on first boot, then starts all services. The new `22-monolith-outbox.sql` seeds `store.*` into the `transaction` DB so the monolith can serve `store` reads via a single `DATABASE_URL`.
 
 ### 4. Access the system
 
-* **Web portal**: http://localhost:3000 (via `monolith:8085` when `MS_ORDER_URL`/`MS_PAYMENT_URL=http://monolith:8085`)
-* **monolith** (API, Go): http://localhost:8085 — `GET /health`, `GET /ms/api/v1/view/product`, `POST /ms/api/v1/auth/login`, `POST /ms/api/v1/order/product`, `POST /ms/api/v1/payment/create/{type}` — and new `POST /v1/order`, `POST /v1/payment/charge`, etc.
-* **ms-order** (API, legacy): http://localhost:8080 - Swagger UI at `/swagger-ui.html`
-* **ms-payment** (API, legacy): http://localhost:9090
-* **ms-paymentagr**: http://localhost:8081 (`/health`)
-* **ms-invoice**: http://localhost:8082
-* **ms-logger**: http://localhost:1337 (`/ms/api/v1/health/check`)
-* **kafka-ui**: http://localhost:8090 (legacy only)
+* **Web portal**: <http://localhost:3000> (via `monolith:8085` when `MS_ORDER_URL`/`MS_PAYMENT_URL=http://monolith:8085`)
+* **monolith** (API, Go): <http://localhost:8085> — `GET /health`, `GET /v1/logs?limit=`, `GET /ms/api/v1/view/product`, `POST /ms/api/v1/auth/login`, `POST /ms/api/v1/order/product`, `POST /ms/api/v1/payment/create/{type}`, `POST /ms/api/v1/payment/refund`, `POST /ms/api/v1/payment/notify` — and new `POST /v1/order`, `POST /v1/payment/charge`, etc.
+* **ms-paymentagr**: <http://localhost:8081> (`/health`)
 
 ### 5. Demo accounts
 
@@ -92,12 +90,10 @@ Seeded in PostgreSQL on first boot (see `project/pg-init-scripts/sql/20-store-sc
 1. Sign in on the web portal (`POST /ms/api/v1/auth/login` → BCrypt verify, `store.store_user`)
 2. Pick a product from the catalog (`GET /ms/api/v1/view/product?username=` → specialProduct filter)
 3. Place order (`POST /ms/api/v1/order/product` with `Idempotency-Key` → `calcPriceCharge` inside `TransactionLifecycle`, `INSERT product_trx CREATED` + outbox + idempotency atomically)
-4. Create payment (`POST /ms/api/v1/payment/create/SHOPEEPAY?transaction_id=` → `CREATED→READY`, idempotent second call returns same `CheckoutUrl`)
-5. Confirm (frontend polls `GET /ms/api/v1/order/{id}/check?username=` with authz `username→userId` check; partner `POST /ms/api/v1/payment/notify` with `SUCCEEDED` → `READY→SUCCESS/PUBLISHED` + outbox `ms-notify-payment`)
-6. Poller (5s) sends outbox, sweeper (60s) moves stale `READY→FAILED` after 5m (missing flow fixed — previously Redis TTL expired but PG row stayed `READY` forever)
-7. Refund (`POST /ms/api/v1/payment/refund` → `SUCCESS→REFUND`, second refund 409)
-
-Legacy Java flow still documented in `assets/simple-order-ms.txt` and `payment-system-sequence-diagram.png`; new flow is `assets/sequence-monolith.png` (white background).
+4. Create payment (`POST /ms/api/v1/payment/create/SHOPEEPAY?transaction_id=` → `CREATED→READY`; calls `ms-paymentagr` with `api-key` when `PARTNER_CHARGE_URL` is set, fail-closed 502 on partner error; idempotent second call returns same `CheckoutUrl`)
+5. Confirm (frontend polls `GET /ms/api/v1/order/{id}/check?username=` with authz `username→userId` check; partner `POST /ms/api/v1/payment/notify` with `SUCCEEDED` + `x-callback-signature`/`x-callback-timestamp` → HMAC + 300s replay verified → `READY→SUCCESS/PUBLISHED` + outbox `ms-notify-payment`; forged callbacks get 401)
+6. Poller (5s) routes outbox: `ms-notify-payment` → invoice receipt file (`INVOICE_DIR/invoice_<tx>.json`), `servicelogs` stay queryable; poison rows get 3x backoff then terminal DLQ (`dlq.*`, never redelivered). Sweeper (60s) moves stale `READY→FAILED` after 5m and purges processed `servicelogs` older than `LOG_RETENTION_DAYS` (30)
+7. Refund (`POST /ms/api/v1/payment/refund` → `SUCCESS→REFUND`, second refund 409); logs at `GET /v1/logs?limit=`
 
 ### 7. Stopping the services
 
@@ -107,8 +103,8 @@ docker compose down
 
 ## Security
 
-* **Authenticated payment callbacks** - ms-paymentagr signs every callback with HMAC-SHA256 (`NOTIFY_SECRET` + timestamp); ms-payment verifies signature and replay window before accepting
-* **API key protection** - ms-paymentagr charge/refund endpoints require the `api-key` header (`PARTNER_API_KEY`)
+* **Authenticated payment callbacks** - ms-paymentagr signs every callback with HMAC-SHA256 (`NOTIFY_SECRET` + timestamp); monolith verifies signature and 300s replay window before accepting (401 on forgery; open only when `NOTIFY_SECRET` is unset for local dev)
+* **API key protection** - ms-paymentagr charge/refund endpoints require the `api-key` header (`PARTNER_API_KEY`); monolith sends it on partner charge calls
 * **Session-based auth** - ms-order issues short-lived opaque session tokens (in-memory, TTL); order placement accepts `Authorization: Bearer` tokens
 * **Password hashing** - BCrypt for new credentials, legacy HMAC verification kept for backward compatibility
 * **Login rate limiting** - per user/IP attempts (10 / 15 minutes)
@@ -126,15 +122,10 @@ docker compose down
 ## Testing
 
 ```bash
-# Go monolith — TransactionLifecycle deep Module (Interface is test surface, 7 unit + 16 e2e via PG)
+# Go monolith — TransactionLifecycle deep Module (tests are the gate per phase)
 cd monolith && go vet ./... && go test ./... -count=1
-# local PG e2e (requires postgres+redis+monolith up): bash /tmp/e2e.sh — covers idempotency, discount 30%, authz 401, READY idempotent, SUCCESS→REFUND 409, FAILED→REFUND 409, sweeper stale→FAILED, outbox
-
-# Java services (legacy, unit tests)
-cd ms-order && ./mvnw test
-cd ms-payment && ./mvnw test
-cd ms-logger && ./mvnw test
-cd ms-invoice && ./mvnw test
+# live-binary e2e (MemoryStore dev mode): order → charge → forged-401 → signed-202 →
+# check SUCCESS → poller invoice file → refund → refund-409 → GET /v1/logs
 
 # Go partner
 cd ms-paymentagr && go vet ./... && go build ./...
@@ -142,8 +133,9 @@ cd ms-paymentagr && go vet ./... && go build ./...
 # Frontend
 cd frontend && npm ci && npm run build
 
-# PlantUML diagrams (white background)
-docker run --rm -v "$(pwd)/assets:/data" plantuml/plantuml /data/sequence-monolith.puml -tpng
+# PlantUML diagrams (white background) — all three; needs Docker
+# (system-main = MAIN overview, sequence-lifecycle, runtime-outbox)
+docker run --rm -v "$(pwd)/assets:/data" plantuml/plantuml /data/'*.puml' -tpng
 ```
 
 CI (`.github/workflows/ci-cd-pipeline.yml`) runs all of the above plus full-stack compose health checks on every push to `master`. The monolith image also builds and vets in CI (`plantuml` render is optional).

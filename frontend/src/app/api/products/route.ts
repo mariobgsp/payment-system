@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { MS_ORDER_URL, buildHeaders, getSession, toEnvelope } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -11,10 +11,18 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("username", username);
 
   try {
-    const res = await fetch(url, { headers: buildHeaders(token), cache: "no-store" });
+    const res = await fetch(url, {
+      headers: buildHeaders(token),
+      cache: "no-store",
+    });
     const body = await res.json();
     if (!res.ok || body.code !== "00") {
-      return toEnvelope(false, null, body.message ?? "failed to load products", 400);
+      return toEnvelope(
+        false,
+        null,
+        body.message ?? "failed to load products",
+        400,
+      );
     }
     return toEnvelope(true, body.data, "ok");
   } catch (e) {

@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	defaultOnce sync.Once
+	defaultOnce    sync.Once
 	defaultAdapter *Adapter
 )
 
@@ -30,7 +30,9 @@ func defaultAdapterInit() *Adapter {
 // Backward compat wrappers — keep old call sites working, now delegate to Adapter with context
 func Config() *config.Config { return defaultAdapterInit().Config() }
 func Redis() *redisDriver.Client {
-	if rs, ok := defaultAdapterInit().Store().(*RedisStore); ok { return rs.Client() }
+	if rs, ok := defaultAdapterInit().Store().(*RedisStore); ok {
+		return rs.Client()
+	}
 	return nil
 }
 func SetData(key string, data interface{}, ttl time.Duration) error {
@@ -49,9 +51,15 @@ func SetData(key string, data interface{}, ttl time.Duration) error {
 	}
 	return defaultAdapterInit().Store().Set(context.Background(), key, b, ttl)
 }
-func GetData(key string) (string, error) { return defaultAdapterInit().Store().Get(context.Background(), key) }
-func GetCharge(refId string) (*models.ChargeRs, error) { return defaultAdapterInit().GetCharge(context.Background(), refId) }
-func TriggerCallback(opKey string) { _ = defaultAdapterInit().TriggerCallback(context.Background(), opKey) }
+func GetData(key string) (string, error) {
+	return defaultAdapterInit().Store().Get(context.Background(), key)
+}
+func GetCharge(refId string) (*models.ChargeRs, error) {
+	return defaultAdapterInit().GetCharge(context.Background(), refId)
+}
+func TriggerCallback(opKey string) {
+	_ = defaultAdapterInit().TriggerCallback(context.Background(), opKey)
+}
 func ChargePayment(rq *models.ChargeRq) (*models.ChargeRs, error) {
 	return defaultAdapterInit().Charge(context.Background(), rq.ReferenceId, *rq, "")
 }

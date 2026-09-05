@@ -43,14 +43,14 @@ type Outbox struct {
 
 // Product and StoreUser mirror store.* tables for legacy compat
 type Product struct {
-	ProductID       int     `json:"productid"`
-	ProductCode     string  `json:"productCode"`
-	ProductName     string  `json:"productName"`
-	Price           int     `json:"price"`
-	Discount        float64 `json:"discount"`
-	EnableDiscount  bool    `json:"enableDiscount"`
-	SpecialProduct  bool    `json:"specialProduct"`
-	ProductStatus   bool    `json:"productStatus"`
+	ProductID      int     `json:"productid"`
+	ProductCode    string  `json:"productCode"`
+	ProductName    string  `json:"productName"`
+	Price          int     `json:"price"`
+	Discount       float64 `json:"discount"`
+	EnableDiscount bool    `json:"enableDiscount"`
+	SpecialProduct bool    `json:"specialProduct"`
+	ProductStatus  bool    `json:"productStatus"`
 }
 type StoreUser struct {
 	ID             int    `json:"id"`
@@ -76,6 +76,9 @@ type Store interface {
 	ListUnprocessedOutbox(ctx context.Context, limit int) ([]Outbox, error)
 	MarkOutboxProcessed(ctx context.Context, id string) error
 	InsertOutbox(ctx context.Context, ob *Outbox) error
+	// Phase 5: log query + retention over PG outbox (replaces Mongo ServiceLog).
+	ListRecentLogs(ctx context.Context, limit int) ([]Outbox, error)
+	PurgeProcessedLogs(ctx context.Context, before time.Time) (int64, error)
 	// legacy product/user for frontend compat
 	GetUserDetail(ctx context.Context, username string) (*StoreUser, error)
 	GetAllProducts(ctx context.Context) ([]Product, error)

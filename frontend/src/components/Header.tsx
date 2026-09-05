@@ -25,7 +25,10 @@ export default function Header() {
     <header className="sticky top-0 z-20 border-b border-ink-800 bg-ink-950/80 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href={username ? "/catalog" : "/"} className="flex items-center gap-2">
+          <Link
+            href={username ? "/catalog" : "/"}
+            className="flex items-center gap-2"
+          >
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-mint-500 font-mono text-sm font-bold text-ink-950">
               ₵
             </span>
@@ -49,12 +52,18 @@ export default function Header() {
             <span className="rounded-full border border-ink-600 bg-ink-800 px-3 py-1 font-mono text-xs text-mint-400">
               {username}
             </span>
-            <button onClick={logout} className="text-sm text-slate-400 transition hover:text-slate-100">
+            <button
+              onClick={logout}
+              className="text-sm text-slate-400 transition hover:text-slate-100"
+            >
               Sign out
             </button>
           </div>
         ) : (
-          <Link href="/login" className="text-sm text-slate-400 transition hover:text-slate-100">
+          <Link
+            href="/login"
+            className="text-sm text-slate-400 transition hover:text-slate-100"
+          >
             Sign in
           </Link>
         )}

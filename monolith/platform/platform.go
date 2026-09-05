@@ -27,9 +27,9 @@ import (
 // Internal seam: Clock (for requestAt / ServiceLog timestamps).
 // No adapters at external Interface; Store is Local-substitutable but only for Publish.
 type Platform struct {
-	Store Store
-	Now   func() time.Time // test clock injection; nil => time.Now
-	AppName string         // e.g. "monolith"
+	Store   Store
+	Now     func() time.Time // test clock injection; nil => time.Now
+	AppName string           // e.g. "monolith"
 }
 
 type Store = store.Store
@@ -85,9 +85,10 @@ func jakartaTime(t time.Time) string {
 // RequestOpts bundles F1 Too Many Args fix — single struct instead of 5 args.
 type RequestOpts struct {
 	Channel, OpName, RequestID string
-	Payload any
-	R       *http.Request
+	Payload                    any
+	R                          *http.Request
 }
+
 func (p *Platform) Request(opts RequestOpts) RequestInfo {
 	channel := p.resolveChannel(opts.Channel, opts.R)
 	reqID := p.resolveRequestID(opts.RequestID, opts.R)
@@ -105,18 +106,30 @@ func (p *Platform) Request(opts RequestOpts) RequestInfo {
 	return info
 }
 func (p *Platform) resolveChannel(channel string, r *http.Request) string {
-	if channel != "" { return channel }
+	if channel != "" {
+		return channel
+	}
 	if r != nil {
-		if v := r.Header.Get("x-request-channel"); v != "" { return v }
-		if v := r.Header.Get("X-Request-Channel"); v != "" { return v }
+		if v := r.Header.Get("x-request-channel"); v != "" {
+			return v
+		}
+		if v := r.Header.Get("X-Request-Channel"); v != "" {
+			return v
+		}
 	}
 	return "WEB"
 }
 func (p *Platform) resolveRequestID(id string, r *http.Request) string {
-	if id != "" { return id }
+	if id != "" {
+		return id
+	}
 	if r != nil {
-		if v := r.Header.Get("x-request-id"); v != "" { return v }
-		if v := r.Header.Get("X-Request-Id"); v != "" { return v }
+		if v := r.Header.Get("x-request-id"); v != "" {
+			return v
+		}
+		if v := r.Header.Get("X-Request-Id"); v != "" {
+			return v
+		}
 	}
 	return uuid.NewString()
 }

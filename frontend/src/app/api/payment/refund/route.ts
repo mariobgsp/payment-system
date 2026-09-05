@@ -1,5 +1,10 @@
-import { NextRequest } from "next/server";
-import { MS_PAYMENT_URL, buildHeaders, getSession, toEnvelope } from "@/lib/api";
+import type { NextRequest } from "next/server";
+import {
+  MS_PAYMENT_URL,
+  buildHeaders,
+  getSession,
+  toEnvelope,
+} from "@/lib/api";
 
 export async function POST(req: NextRequest) {
   const { token, username } = await getSession();

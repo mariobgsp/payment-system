@@ -10,14 +10,21 @@ export const metadata: Metadata = {
   description: "Order and payment portal for the microservices payment system",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-ink-950">
         <Header />
-        <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8">
+          {children}
+        </main>
         <footer className="border-t border-ink-800 py-6 text-center text-xs text-slate-500">
-          payment-system · ms-order · ms-payment · ms-paymentagr · ms-invoice · ms-logger
+          payment-system · ms-order · ms-payment · ms-paymentagr · ms-invoice ·
+          ms-logger
         </footer>
       </body>
     </html>
