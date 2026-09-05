@@ -19,7 +19,7 @@ skinparam title {
   FontColor #111827
   BorderThickness 0
 }
-title Payment System — Go-only overview (MAIN)\n<small>5 containers: frontend + monolith + ms-paymentagr + postgres + redis • Java/Kafka/Mongo decommissioned</small>
+title Payment System — Go-only overview (MAIN)\n<size:12>5 containers: frontend + monolith + ms-paymentagr + postgres + redis • Java/Kafka/Mongo decommissioned</size>
 
 actor User as U
 

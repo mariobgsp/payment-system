@@ -22,7 +22,7 @@ skinparam title {
   FontColor #111827
   BorderThickness 0
 }
-title Payment lifecycle — order → charge → callback → refund\n<small>Monolith :8085 • HMAC callbacks • partner HTTP when configured • idempotent • white background</small>
+title Payment lifecycle — order → charge → callback → refund\n<size:12>Monolith :8085 • HMAC callbacks • partner HTTP when configured • idempotent • white background</size>
 
 actor User as U
 participant "Frontend\n:3000" as FE #E0E7FF

@@ -16,7 +16,7 @@ skinparam title {
   FontColor #111827
   BorderThickness 0
 }
-title Outbox runtime — delivery, DLQ, invoice, logs\n<small>Poller 5s • retry 3x backoff • DLQ topic dlq.* (terminal) • white background</small>
+title Outbox runtime — delivery, DLQ, invoice, logs\n<size:12>Poller 5s • retry 3x backoff • DLQ topic dlq.* (terminal) • white background</size>
 
 start
 :Poller Tick — ListUnprocessedOutbox(50); \nskip dlq.* rows (never redelivered);
@@ -38,17 +38,7 @@ while (more rows?) is (yes)
     note right: original never retried again;\nDLQ rows are terminal
   endif
 endwhile (no)
-stop
-
-' --- log query + retention side flow ---
-newpage Log query + retention (replaces Mongo)
-start
-:GET /v1/logs?limit= (default 50, max 500);
-:ListRecentLogs — newest servicelogs first;
-stop
-
-newpage Retention (sweeper, 60s tick)
-start
-:PurgeProcessedLogs — delete processed\nservicelogs older than LOG_RETENTION_DAYS (30);
+:Log side (replaces Mongo):
+GET /v1/logs + 30d purge;
 stop
 @enduml
