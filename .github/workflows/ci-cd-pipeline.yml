@@ -8,78 +8,141 @@ on:
     branches:
       - master
 
+# Cancel superseded runs on the same ref — saves minutes on force-pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
+  # ------------------------------------------------------------------
+  # What actually ships (see project/docker-compose.yml header: the Java
+  # ms-order/ms-payment/ms-invoice/ms-logger services are decommissioned,
+  # so the old "Build and test ms-*" steps tested dead code and the only
+  # live Go service tested in CI was ms-paymentagr — without its tests).
+  # ------------------------------------------------------------------
+
+  go-monolith:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: monolith
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
+      - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.25"
+          cache-dependency-path: monolith/go.sum
 
+      - name: gofmt check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet and test
+        run: |
+          go vet ./...
+          go test ./... -count=1
+
+      - name: Build
+        run: go build ./...
+
+  go-paymentagr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ms-paymentagr
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: ms-paymentagr/go.sum
+
+      - name: gofmt check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet, test and build
+        run: |
+          go vet ./...
+          go test ./... -count=1
+          go build ./...
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      # node:20 to match frontend.dockerfile runtime (not 22).
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Build and test ms-order
-        run: ./mvnw test
-        working-directory: ms-order
+      - name: Install
+        run: npm ci
 
-      - name: Build and test ms-payment
-        run: ./mvnw test
-        working-directory: ms-payment
+      - name: Typecheck
+        run: npx tsc --noEmit
 
-      - name: Build and test ms-logger
-        run: ./mvnw test
-        working-directory: ms-logger
+      - name: Unit tests
+        run: npm test
 
-      - name: Build and test ms-invoice
-        run: ./mvnw test
-        working-directory: ms-invoice
+      - name: Build
+        run: npm run build
 
-      - name: Vet and build ms-paymentagr
-        run: |
-          go vet ./...
-          go build ./...
-        working-directory: ms-paymentagr
-
-      - name: Build frontend
-        run: |
-          npm ci
-          npm run build
-        working-directory: frontend
+  e2e-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [go-monolith, go-paymentagr, frontend]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
 
       - name: Prepare environment
-        run: cp project/.env.example project/.env
+        run: cp -n project/.env.example project/.env || true
+
+      - name: Validate compose config
+        run: docker compose -f ./project/docker-compose.yml config --quiet
 
       - name: Build and run services with Docker Compose
-        run: docker compose -f ./project/docker-compose.yml up -d --build
-
-      - name: Wait for services to be ready
-        run: sleep 45
+        run: docker compose -f ./project/docker-compose.yml up -d --build --wait --wait-timeout 300
 
       - name: Run health checks
         run: |
-          echo "Checking ms-logger service..."
-          curl -fsS http://127.0.0.1:1337/ms/api/v1/health/check || exit 1
+          wait_for() {
+            for _ in $(seq 1 30); do
+              if curl -fsS "$1" >/dev/null; then return 0; fi
+              sleep 10
+            done
+            echo "TIMED OUT waiting for $1" >&2
+            return 1
+          }
+          echo "Checking monolith..."
+          wait_for http://127.0.0.1:8085/health
+          echo "Checking monolith legacy compat..."
+          wait_for http://127.0.0.1:8085/ms/api/v1/health/check
           echo "Checking ms-paymentagr service..."
-          curl -fsS http://127.0.0.1:8081/health || exit 1
+          wait_for http://127.0.0.1:8081/health
           echo "Checking frontend..."
-          curl -fsS http://127.0.0.1:3000/login || exit 1
+          wait_for http://127.0.0.1:3000/login
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose -f ./project/docker-compose.yml logs --tail=200
 
       - name: Stop Docker Compose services
         if: always()
-        run: docker compose -f ./project/docker-compose.yml down
+        run: docker compose -f ./project/docker-compose.yml down -v
