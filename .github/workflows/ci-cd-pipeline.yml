@@ -139,6 +139,18 @@ jobs:
           echo "Checking frontend..."
           wait_for http://127.0.0.1:3000/login
 
+      # The health endpoints above never touch PostgreSQL, so an empty/failed
+      # schema init still let this job pass (which is how the stale `--dbname ms`
+      # init bug went unnoticed). Assert the schemas actually applied.
+      - name: Verify database schema applied
+        run: |
+          docker compose -f ./project/docker-compose.yml exec -T postgres \
+            sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d transaction \
+              -c "SELECT count(*) AS products FROM store.product;" \
+              -c "SELECT count(*) AS users FROM store.store_user;" \
+              -c "SELECT count(*) AS trx FROM transaction.product_trx;" \
+              -c "SELECT count(*) AS outbox FROM transaction.outbox;"'
+
       - name: Dump service logs on failure
         if: failure()
         run: docker compose -f ./project/docker-compose.yml logs --tail=200
