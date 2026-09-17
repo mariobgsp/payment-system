@@ -121,7 +121,9 @@ func partnerChargeURL(ctx context.Context, txID string, amount int64, method str
 		return "", fmt.Errorf("partner charge %d: %s", resp.StatusCode, string(raw))
 	}
 	var rs struct {
-		Action      *struct{ CheckoutURL string `json:"checkout_url"` } `json:"action"`
+		Action *struct {
+			CheckoutURL string `json:"checkout_url"`
+		} `json:"action"`
 		CheckoutURL string `json:"checkoutUrl"`
 	}
 	_ = json.Unmarshal(raw, &rs)

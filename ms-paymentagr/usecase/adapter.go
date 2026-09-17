@@ -40,7 +40,7 @@ func NewAdapter(cfg *config.Config, store Store, notifier Notifier) *Adapter {
 }
 
 func (a *Adapter) Config() *config.Config { return a.cfg }
-func (a *Adapter) Store() Store            { return a.store }
+func (a *Adapter) Store() Store           { return a.store }
 
 func signPayload(secret, timestamp string, payload []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
