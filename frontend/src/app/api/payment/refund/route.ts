@@ -4,7 +4,7 @@ import { authCatch, backend, buildHeaders, requireSession, toEnvelope } from "@/
 export async function POST(req: NextRequest) {
   try {
     const { token, username } = await requireSession();
-    const { transactionId } = await req.json();
+    const { transactionId } = (await req.json()) as { transactionId?: string };
     if (!transactionId) return toEnvelope(false, null, "transactionId is required", 400);
     const data = await backend(`/ms/api/v1/payment/refund`, {
       method: "POST",

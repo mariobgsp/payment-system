@@ -22,7 +22,7 @@ export default function CatalogPage() {
   const [placeError, setPlaceError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         await apiGet("/api/auth/me");
         setProducts(await apiGet<Product[]>("/api/products"));

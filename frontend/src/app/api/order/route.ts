@@ -4,7 +4,13 @@ import { authCatch, backend, buildHeaders, requireSession, toEnvelope } from "@/
 export async function POST(req: NextRequest) {
   try {
     const { token, username } = await requireSession();
-    const { productCode, productName, amount, price, enableDiscount } = await req.json();
+    const { productCode, productName, amount, price, enableDiscount } = (await req.json()) as {
+      productCode?: string;
+      productName?: string;
+      amount?: number;
+      price?: number;
+      enableDiscount?: boolean;
+    };
     if (!productCode || !productName || !amount || amount < 1 || !price) {
       return toEnvelope(false, null, "invalid order payload", 400);
     }

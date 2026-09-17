@@ -4,7 +4,10 @@ import { FRONTEND_URL, authCatch, backend, buildHeaders, requireSession, toEnvel
 export async function POST(req: NextRequest) {
   try {
     const { token, username } = await requireSession();
-    const { transactionId, paymentType = "SHOPEEPAY" } = await req.json();
+    const { transactionId, paymentType = "SHOPEEPAY" } = (await req.json()) as {
+      transactionId?: string;
+      paymentType?: string;
+    };
     if (!transactionId) return toEnvelope(false, null, "transactionId is required", 400);
     const data = await backend(
       `/ms/api/v1/payment/create/${encodeURIComponent(paymentType)}?transaction_id=${encodeURIComponent(transactionId)}&username=${encodeURIComponent(username)}`,

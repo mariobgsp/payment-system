@@ -132,55 +132,57 @@ export class HttpGateway implements Gateway {
   };
 }
 
-// FakeGateway for tests — in-memory, no fetch
+// FakeGateway for tests — in-memory, no fetch. Maps (not keyed objects) so
+// dynamic lookups aren't object injection; counter ids, no Math.random.
 export class FakeGateway implements Gateway {
-  private users: Record<string, UserDetail> = {
-    klhomme0: { id: 1, userId: "b2xrasd", username: "klhomme0", firstName: "Kimbra", lastName: "L'Homme", email: "k@test", specialProduct: true, recurring: true, token: "tok-klhomme0" },
-  };
+  private users = new Map<string, UserDetail>([
+    ["klhomme0", { id: 1, userId: "b2xrasd", username: "klhomme0", firstName: "Kimbra", lastName: "L'Homme", email: "k@test", specialProduct: true, recurring: true, token: "tok-klhomme0" }],
+  ]);
   private productList: Product[] = [
     { productCode: "TJX-99896", productName: "Carbonated Water", price: 61557, discount: 0.71, discountAvailable: false, productUpdateDate: "", productInsertDate: "" },
   ];
-  private orders: Record<string, ProductTrx> = {};
+  private orders = new Map<string, ProductTrx>();
+  private seq = 0;
 
   auth = {
-    login: async (username: string, password: string): Promise<UserDetail> => {
-      const u = this.users[username];
-      if (!u || password === "wrong") throw new Error("invalid credentials");
-      return u;
+    login: (username: string, password: string): Promise<UserDetail> => {
+      const u = this.users.get(username);
+      if (!u || password === "wrong") return Promise.reject(new Error("invalid credentials"));
+      return Promise.resolve(u);
     },
   };
   products = {
-    list: async (_username?: string, _token?: string): Promise<Product[]> => this.productList,
+    list: (): Promise<Product[]> => Promise.resolve(this.productList),
   };
   order = {
-    create: async (cmd: { productCode: string; productName: string; amount: number; price: number; username: string }, _token?: string): Promise<OrderResult> => {
-      const id = `PTRX-${Math.random().toString(36).slice(2, 10)}`;
+    create: (cmd: { productCode: string; productName: string; amount: number; price: number; username: string }): Promise<OrderResult> => {
+      const id = `PTRX-test-${++this.seq}`;
       const now = new Date().toISOString();
-      this.orders[id] = { id: `MSO-${id}`, sysCreationDate: now, transactionId: id, orderStatus: "CREATED", paymentStatus: "CREATED", userId: "b2xrasd", productName: cmd.productName, amount: cmd.amount, price: cmd.price, priceCharge: cmd.price * cmd.amount, productCode: cmd.productCode, param1: null, param2: null, sysUpdateDate: now, paymentDate: "", discountEnabled: false, discount: 0 };
-      return { transactionId: id, createdAt: now };
+      this.orders.set(id, { id: `MSO-${id}`, sysCreationDate: now, transactionId: id, orderStatus: "CREATED", paymentStatus: "CREATED", userId: "b2xrasd", productName: cmd.productName, amount: cmd.amount, price: cmd.price, priceCharge: cmd.price * cmd.amount, productCode: cmd.productCode, param1: null, param2: null, sysUpdateDate: now, paymentDate: "", discountEnabled: false, discount: 0 });
+      return Promise.resolve({ transactionId: id, createdAt: now });
     },
-    check: async (transactionId: string, _username?: string, _token?: string): Promise<ProductTrx> => {
-      const t = this.orders[transactionId];
-      if (!t) throw new Error("not found");
-      return t;
+    check: (transactionId: string): Promise<ProductTrx> => {
+      const t = this.orders.get(transactionId);
+      if (!t) return Promise.reject(new Error("not found"));
+      return Promise.resolve(t);
     },
   };
   payment = {
-    create: async (transactionId: string, _username?: string, _token?: string, _type?: string): Promise<PaymentResult> => {
-      const o = this.orders[transactionId];
+    create: (transactionId: string): Promise<PaymentResult> => {
+      const o = this.orders.get(transactionId);
       if (o) o.paymentStatus = "READY";
-      return { CheckoutUrl: `/pay/${transactionId}` };
+      return Promise.resolve({ CheckoutUrl: `/pay/${transactionId}` });
     },
-    refund: async (transactionId: string, _username?: string, _token?: string): Promise<unknown> => {
-      const o = this.orders[transactionId];
-      if (!o || o.paymentStatus !== "SUCCESS") throw new Error("not refundable");
+    refund: (transactionId: string): Promise<unknown> => {
+      const o = this.orders.get(transactionId);
+      if (!o || o.paymentStatus !== "SUCCESS") return Promise.reject(new Error("not refundable"));
       o.paymentStatus = "REFUND";
-      return { status: "REFUND" };
+      return Promise.resolve({ status: "REFUND" });
     },
   };
 
   _seedPaid(id: string) {
-    const o = this.orders[id];
+    const o = this.orders.get(id);
     if (o) {
       o.paymentStatus = "SUCCESS";
       o.orderStatus = "PUBLISHED";
