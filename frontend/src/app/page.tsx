@@ -2,16 +2,19 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet } from "@/lib/shared";
+
+interface BffEnvelope {
+  ok?: unknown;
+}
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    apiGet("/api/auth/me").then(
-      () => router.replace("/catalog"),
-      () => router.replace("/login"),
-    );
+    fetch("/api/auth/me")
+      .then(async (r): Promise<BffEnvelope> => (await r.json()) as BffEnvelope)
+      .then((b) => router.replace(b.ok ? "/catalog" : "/login"))
+      .catch(() => router.replace("/login"));
   }, [router]);
 
   return (

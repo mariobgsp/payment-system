@@ -4,7 +4,35 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { ProductTrx } from "@/lib/types";
 import { formatDate, formatIdr } from "@/lib/format";
-import { apiGet, apiPost, statusClass } from "@/lib/shared";
+
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
+
+// Local fetch helper (no cross-file value imports): GET/POST + envelope check.
+async function bff<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, init);
+  const raw: unknown = await res.json();
+  const body = raw as BffEnvelope;
+  if (!body.ok) throw new Error(typeof body.message === "string" ? body.message : `${path} failed`);
+  return body.data as T;
+}
+
+// Map (not a keyed object) so dynamic status lookup isn't object injection.
+const statusColor = new Map<string, string>([
+  ["CREATED", "bg-sky-500/10 text-sky-300 border-sky-500/30"],
+  ["READY", "bg-amber-500/10 text-amber-300 border-amber-500/30"],
+  ["PENDING", "bg-amber-500/10 text-amber-300 border-amber-500/30"],
+  ["SUCCESS", "bg-mint-500/10 text-mint-400 border-mint-500/30"],
+  ["PUBLISHED", "bg-mint-500/10 text-mint-400 border-mint-500/30"],
+  ["REFUND", "bg-red-500/10 text-red-300 border-red-500/30"],
+]);
+
+function statusClass(s: string): string {
+  return statusColor.get(s) ?? "bg-slate-500/10 text-slate-300 border-slate-500/30";
+}
 
 type Step = "idle" | "paying" | "checking" | "done";
 
@@ -29,7 +57,7 @@ export default function PayPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const data = await apiGet<ProductTrx>(`/api/order/check?transactionId=${encodeURIComponent(transactionId)}`);
+      const data = await bff<ProductTrx>(`/api/order/check?transactionId=${encodeURIComponent(transactionId)}`);
       setTrx(data);
       if (data?.paymentStatus === "SUCCESS" || data?.paymentStatus === "REFUND") {
         setStep("done");
@@ -49,7 +77,11 @@ export default function PayPage() {
     setError(null);
     setStep("paying");
     try {
-      const data = await apiPost<{ CheckoutUrl: string }>("/api/payment", { transactionId });
+      const data = await bff<{ CheckoutUrl: string }>("/api/payment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transactionId }),
+      });
       setCheckoutUrl(data.CheckoutUrl);
       setStep("checking");
     } catch (err) {
@@ -68,7 +100,11 @@ export default function PayPage() {
     setRefunding(true);
     setError(null);
     try {
-      await apiPost("/api/payment/refund", { transactionId });
+      await bff("/api/payment/refund", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transactionId }),
+      });
       pollRef.current = setInterval(() => void fetchStatus(), 3000);
     } catch (err) {
       setError((err as Error).message);

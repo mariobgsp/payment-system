@@ -2,7 +2,11 @@
 
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost } from "@/lib/shared";
+
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+}
 
 const DEMO_USERS = [
   { username: "klhomme0", password: "user1Pass!" },
@@ -23,7 +27,17 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await apiPost("/api/auth/login", { username, password });
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const raw: unknown = await res.json();
+      const body = raw as BffEnvelope;
+      if (!body.ok) {
+        setError(typeof body.message === "string" ? body.message : "login failed");
+        return;
+      }
     } catch (err) {
       setError((err as Error).message);
       return;

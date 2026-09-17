@@ -2,7 +2,11 @@
 
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost } from "@/lib/shared";
+
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+}
 
 export default function RefundPage() {
   const router = useRouter();
@@ -17,9 +21,19 @@ export default function RefundPage() {
     setError(null);
     setResult(null);
     try {
-      await apiPost("/api/payment/refund", { transactionId });
-      setResult(`Refund accepted for transaction ${transactionId}.`);
-      setTransactionId("");
+      const res = await fetch("/api/payment/refund", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transactionId }),
+      });
+      const raw: unknown = await res.json();
+      const body = raw as BffEnvelope;
+      if (body.ok) {
+        setResult(`Refund accepted for transaction ${transactionId}.`);
+        setTransactionId("");
+      } else {
+        setError(typeof body.message === "string" ? body.message : "refund request failed");
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {

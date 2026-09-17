@@ -4,7 +4,26 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
 import { formatIdr } from "@/lib/format";
-import { apiGet, apiPost, totalPrice } from "@/lib/shared";
+
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
+
+// Local fetch helper (no cross-file value imports): GET/POST + envelope check.
+async function bff<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, init);
+  const raw: unknown = await res.json();
+  const body = raw as BffEnvelope;
+  if (!body.ok) throw new Error(typeof body.message === "string" ? body.message : `${path} failed`);
+  return body.data as T;
+}
+
+function totalPrice(p: Product, amount: number, enableDiscount: boolean): number {
+  const unit = p.discountAvailable && enableDiscount ? p.price * (1 - p.discount) : p.price;
+  return Math.round(unit) * amount;
+}
 
 interface OrderDraft {
   product: Product;
@@ -24,8 +43,8 @@ export default function CatalogPage() {
   useEffect(() => {
     void (async () => {
       try {
-        await apiGet("/api/auth/me");
-        setProducts(await apiGet<Product[]>("/api/products"));
+        await bff("/api/auth/me");
+        setProducts(await bff<Product[]>("/api/products"));
       } catch (err) {
         const msg = (err as Error).message;
         if (msg.includes("not authenticated")) router.replace("/login");
@@ -41,12 +60,16 @@ export default function CatalogPage() {
     setPlacing(true);
     setPlaceError(null);
     try {
-      const data = await apiPost<{ transactionId: string }>("/api/order", {
-        productCode: draft.product.productCode,
-        productName: draft.product.productName,
-        amount: draft.amount,
-        price: draft.product.price,
-        enableDiscount: draft.enableDiscount,
+      const data = await bff<{ transactionId: string }>("/api/order", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          productCode: draft.product.productCode,
+          productName: draft.product.productName,
+          amount: draft.amount,
+          price: draft.product.price,
+          enableDiscount: draft.enableDiscount,
+        }),
       });
       sessionStorage.setItem(`order_${data.transactionId}`, JSON.stringify({ ...draft, productName: draft.product.productName }));
       router.push(`/pay/${data.transactionId}`);

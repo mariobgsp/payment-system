@@ -3,17 +3,21 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/shared";
+
+interface MeEnvelope {
+  ok?: unknown;
+  data?: { username?: string } | null;
+}
 
 export default function Header() {
   const router = useRouter();
   const [username, setUsername] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<{ username: string }>("/api/auth/me").then(
-      (data) => setUsername(data.username),
-      () => setUsername(null),
-    );
+    fetch("/api/auth/me")
+      .then(async (r): Promise<MeEnvelope> => (await r.json()) as MeEnvelope)
+      .then((b) => setUsername(typeof b.data?.username === "string" ? b.data.username : null))
+      .catch(() => setUsername(null));
   }, []);
 
   async function logout() {
