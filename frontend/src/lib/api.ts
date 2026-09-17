@@ -48,7 +48,11 @@ export function authCatch(e: unknown, fallback = 400) {
 }
 
 // backend fetches monolith envelope {code,message,data} and maps to BFF {ok,data,message}.
-type MonolithEnvelope = { code?: unknown; message?: unknown; data?: unknown };
+interface MonolithEnvelope {
+  code?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
 
 export async function backend<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);

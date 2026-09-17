@@ -2,7 +2,11 @@ import type { Product } from "./types";
 
 // Shared by catalog + pay pages — was duplicated fetch/json/ok + pricing + colors.
 
-type BffEnvelope = { ok?: unknown; message?: unknown; data?: unknown };
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
 
 function unwrapBff<T>(raw: BffEnvelope, path: string, method: string): T {
   if (!raw.ok) {

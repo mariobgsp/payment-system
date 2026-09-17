@@ -32,7 +32,7 @@ export async function unwrap<T>(url: string, init?: RequestInit): Promise<T> {
   } catch {
     body = null;
   }
-  if (!res.ok || !body || body.code !== "00") {
+  if (!res.ok || body?.code !== "00") {
     throw new Error(body?.message ?? `request failed ${res.status}`);
   }
   return body.data as T;
@@ -59,7 +59,7 @@ function normalizePaymentResult(raw: unknown): PaymentResult {
   return { CheckoutUrl: url };
 }
 
-export type Gateway = {
+export interface Gateway {
   auth: { login(username: string, password: string): Promise<UserDetail> };
   products: { list(username: string, token?: string): Promise<Product[]> };
   order: {
@@ -73,7 +73,7 @@ export type Gateway = {
     create(transactionId: string, username: string, token?: string, type?: string): Promise<PaymentResult>;
     refund(transactionId: string, username: string, token?: string): Promise<unknown>;
   };
-};
+}
 
 export class HttpGateway implements Gateway {
   auth = {
@@ -175,7 +175,7 @@ export class FakeGateway implements Gateway {
     },
     refund: (transactionId: string): Promise<unknown> => {
       const o = this.orders.get(transactionId);
-      if (!o || o.paymentStatus !== "SUCCESS") return Promise.reject(new Error("not refundable"));
+      if (o?.paymentStatus !== "SUCCESS") return Promise.reject(new Error("not refundable"));
       o.paymentStatus = "REFUND";
       return Promise.resolve({ status: "REFUND" });
     },

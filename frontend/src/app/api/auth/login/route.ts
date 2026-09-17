@@ -1,9 +1,20 @@
 import type { NextRequest } from "next/server";
 import { MS_ORDER_URL, buildHeaders, toEnvelope } from "@/lib/api";
 
-type LoginBody = { username?: string; password?: string };
-type MonolithLogin = { code?: unknown; message?: unknown; data?: unknown };
-type LoginData = { token?: unknown; username?: unknown } | null;
+interface LoginBody {
+  username?: string;
+  password?: string;
+}
+interface MonolithLogin {
+  code?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
+interface LoginDataShape {
+  token?: unknown;
+  username?: unknown;
+}
+type LoginData = LoginDataShape | null;
 
 export async function POST(req: NextRequest) {
   try {
