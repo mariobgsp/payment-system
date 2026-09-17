@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -177,10 +178,9 @@ func (id *Identity) VerifyCallback(secret, timestamp, body, signature string) bo
 }
 
 func parseTimestamp(ts string) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, time.RFC1123, "2006-01-02T15:04:05Z07:00"} {
-		if t, err := time.Parse(layout, ts); err == nil {
-			return t, nil
-		}
+	// RFC3339 covers ISO8601; unix seconds for partner callbacks.
+	if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		return t, nil
 	}
 	sec, err := strconv.ParseInt(ts, 10, 64)
 	if err != nil {
@@ -202,18 +202,12 @@ func VerifyPassword(rawPassword, storedHash, secret string) bool {
 	if rawPassword == "" || storedHash == "" {
 		return false
 	}
-	if len(storedHash) > 2 && storedHash[:3] == "$2a" || len(storedHash) > 2 && storedHash[:3] == "$2b" {
-		if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(rawPassword)); err == nil {
-			return true
-		}
-		return false
+	if strings.HasPrefix(storedHash, "$2a") || strings.HasPrefix(storedHash, "$2b") {
+		return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(rawPassword)) == nil
 	}
 	// legacy HMAC-SHA256 base64
 	expected := encodeRequestBody(rawPassword, secret)
-	if expected == "" {
-		return false
-	}
-	return hmac.Equal([]byte(expected), []byte(storedHash))
+	return expected != "" && hmac.Equal([]byte(expected), []byte(storedHash))
 }
 
 func encodeRequestBody(requestBody, secret string) string {
@@ -244,17 +238,20 @@ type ApiError struct {
 	Msg  string
 }
 
-func (e *ApiError) Error() string { return e.Msg }
+func (e *ApiError) Error() string { return "ID: " + e.Msg }
+
+func (id *Identity) expired(t time.Time) bool {
+	return id.clock.Now().Sub(t) > id.window
+}
 
 func (id *Identity) allowAttempt(key string) bool {
 	id.mu.Lock()
 	defer id.mu.Unlock()
 	a, ok := id.attempts[key]
-	if !ok {
-		return true
-	}
-	if id.clock.Now().Sub(a.firstAttemptAt) > id.window {
-		delete(id.attempts, key)
+	if !ok || id.expired(a.firstAttemptAt) {
+		if ok {
+			delete(id.attempts, key)
+		}
 		return true
 	}
 	return a.count < id.maxAttempts
@@ -262,10 +259,9 @@ func (id *Identity) allowAttempt(key string) bool {
 func (id *Identity) recordFailure(key string) {
 	id.mu.Lock()
 	defer id.mu.Unlock()
-	now := id.clock.Now()
-	if a, ok := id.attempts[key]; ok && now.Sub(a.firstAttemptAt) <= id.window {
+	if a, ok := id.attempts[key]; ok && !id.expired(a.firstAttemptAt) {
 		a.count++
 	} else {
-		id.attempts[key] = &loginAttempt{count: 1, firstAttemptAt: now}
+		id.attempts[key] = &loginAttempt{count: 1, firstAttemptAt: id.clock.Now()}
 	}
 }

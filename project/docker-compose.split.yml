@@ -1,0 +1,32 @@
+# Split hatch (middle path): runs invoice generation as a separate deployable
+# built from the same repo/packages — no broker, no new DB, no rewrite.
+# Default compose does NOT include it (single binary, local invoice files).
+#
+# Enable with:
+#   cd project && docker compose -f docker-compose.yml -f docker-compose.split.yml up --build
+services:
+  monolith:
+    environment:
+      - INVOICE_URL=http://invoice-worker:8086/invoice
+
+  invoice-worker:
+    container_name: invoice-worker
+    build:
+      context: ./../monolith
+      dockerfile: ./invoiceworker.dockerfile
+    restart: always
+    environment:
+      - PORT=8086
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/transaction?sslmode=disable
+      - INVOICE_DIR=/tmp/invoices
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8086:8086"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s

@@ -116,8 +116,8 @@ func (s *PGStore) FindStaleReady(ctx context.Context, before time.Time, limit in
 	return out, rows.Err()
 }
 
-func (s *PGStore) ListUnprocessedOutbox(ctx context.Context, limit int) ([]Outbox, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, aggregate_id, topic, payload, created_at FROM transaction.outbox WHERE processed_at IS NULL ORDER BY created_at LIMIT $1`, limit)
+func (s *PGStore) queryOutbox(ctx context.Context, sql string, args ...any) ([]Outbox, error) {
+	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +131,10 @@ func (s *PGStore) ListUnprocessedOutbox(ctx context.Context, limit int) ([]Outbo
 		out = append(out, o)
 	}
 	return out, rows.Err()
+}
+
+func (s *PGStore) ListUnprocessedOutbox(ctx context.Context, limit int) ([]Outbox, error) {
+	return s.queryOutbox(ctx, `SELECT id, aggregate_id, topic, payload, created_at FROM transaction.outbox WHERE processed_at IS NULL ORDER BY created_at LIMIT $1`, limit)
 }
 
 func (s *PGStore) MarkOutboxProcessed(ctx context.Context, id string) error {
@@ -143,20 +147,7 @@ func (s *PGStore) InsertOutbox(ctx context.Context, ob *Outbox) error {
 }
 
 func (s *PGStore) ListRecentLogs(ctx context.Context, limit int) ([]Outbox, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, aggregate_id, topic, payload, created_at FROM transaction.outbox WHERE topic='servicelogs' ORDER BY created_at DESC LIMIT $1`, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Outbox
-	for rows.Next() {
-		var o Outbox
-		if err := rows.Scan(&o.ID, &o.AggregateID, &o.Topic, &o.Payload, &o.CreatedAt); err != nil {
-			return nil, err
-		}
-		out = append(out, o)
-	}
-	return out, rows.Err()
+	return s.queryOutbox(ctx, `SELECT id, aggregate_id, topic, payload, created_at FROM transaction.outbox WHERE topic='servicelogs' ORDER BY created_at DESC LIMIT $1`, limit)
 }
 
 func (s *PGStore) PurgeProcessedLogs(ctx context.Context, before time.Time) (int64, error) {
@@ -180,8 +171,11 @@ func scanProductRow(row interface{ Scan(dest ...any) error }) (Product, error) {
 	err := row.Scan(&p.ProductID, &p.ProductCode, &p.ProductName, &p.Price, &p.Discount, &p.EnableDiscount, &p.SpecialProduct, &p.ProductStatus)
 	return p, err
 }
-func (s *PGStore) GetAllProducts(ctx context.Context) ([]Product, error) {
-	rows, err := s.pool.Query(ctx, `SELECT productid, productcode, productname, price, discount, enablediscount, specialproduct, productstatus FROM store.product`)
+
+const productCols = `SELECT productid, productcode, productname, price, discount, enablediscount, specialproduct, productstatus FROM store.product`
+
+func (s *PGStore) queryProducts(ctx context.Context, sql string, args ...any) ([]Product, error) {
+	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -195,25 +189,15 @@ func (s *PGStore) GetAllProducts(ctx context.Context) ([]Product, error) {
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+func (s *PGStore) GetAllProducts(ctx context.Context) ([]Product, error) {
+	return s.queryProducts(ctx, productCols)
 }
 func (s *PGStore) GetSpecialProducts(ctx context.Context, special bool) ([]Product, error) {
-	rows, err := s.pool.Query(ctx, `SELECT productid, productcode, productname, price, discount, enablediscount, specialproduct, productstatus FROM store.product WHERE specialproduct=$1 AND productstatus=true`, special)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Product
-	for rows.Next() {
-		p, err := scanProductRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
+	return s.queryProducts(ctx, productCols+` WHERE specialproduct=$1 AND productstatus=true`, special)
 }
 func (s *PGStore) GetSingleProduct(ctx context.Context, code string) (*Product, error) {
-	row := s.pool.QueryRow(ctx, `SELECT productid, productcode, productname, price, discount, enablediscount, specialproduct, productstatus FROM store.product WHERE productcode=$1 AND productstatus=true`, code)
+	row := s.pool.QueryRow(ctx, productCols+` WHERE productcode=$1 AND productstatus=true`, code)
 	var p Product
 	if err := row.Scan(&p.ProductID, &p.ProductCode, &p.ProductName, &p.Price, &p.Discount, &p.EnableDiscount, &p.SpecialProduct, &p.ProductStatus); err != nil {
 		return nil, err

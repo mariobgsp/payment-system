@@ -18,3 +18,6 @@ target/
 
 # logs
 *.log
+
+# agent state
+.pi/
