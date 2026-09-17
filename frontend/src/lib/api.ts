@@ -28,11 +28,21 @@ export function toEnvelope<T>(ok: boolean, data: T | null, message: string, stat
   return Response.json({ ok, data, message }, { status });
 }
 
-// requireSession replaces 6x if (!token || !username) blocks in BFF routes.
-export async function requireSession(): Promise<{ token: string; username: string } | Response> {
+// requireSession throws AuthError instead of returning a Response union —
+export class AuthError extends Error {
+  status = 401;
+}
+
+export async function requireSession(): Promise<{ token: string; username: string }> {
   const { token, username } = await getSession();
-  if (!token || !username) return toEnvelope(false, null, "not authenticated", 401);
+  if (!token || !username) throw new AuthError("not authenticated");
   return { token, username };
+}
+
+// authCatch maps AuthError→401, other errors→fallback. Replaces per-route auth ifs + catch blocks.
+export function authCatch(e: unknown, fallback = 400) {
+  if (e instanceof AuthError) return toEnvelope(false, null, e.message, e.status);
+  return toEnvelope(false, null, (e as Error).message, fallback);
 }
 
 // backend fetches monolith envelope {code,message,data} and maps to BFF {ok,data,message}.
