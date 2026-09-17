@@ -1,7 +1,6 @@
-import type { NextRequest } from "next/server";
-import { MS_ORDER_URL, buildHeaders, getSession, toEnvelope } from "@/lib/api";
+import { MS_ORDER_URL, buildHeaders, getSession } from "@/lib/api";
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   const { token } = await getSession();
   if (token) {
     try {
@@ -15,14 +14,15 @@ export async function POST(req: NextRequest) {
   }
 
   const headers = new Headers();
+  headers.append("content-type", "application/json");
   headers.append(
     "Set-Cookie",
     `ps_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
   );
   headers.append("Set-Cookie", `ps_username=; SameSite=Lax; Path=/; Max-Age=0`);
 
-  return Response.json(
-    { ok: true, data: null, message: "logged out" },
-    { status: 200, headers },
-  );
+  return new Response(JSON.stringify({ ok: true, data: null, message: "logged out" }), {
+    status: 200,
+    headers,
+  });
 }

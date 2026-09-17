@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiPost } from "@/lib/shared";
 
 export default function RefundPage() {
   const router = useRouter();
@@ -16,18 +17,9 @@ export default function RefundPage() {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch("/api/payment/refund", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transactionId }),
-      });
-      const body = await res.json();
-      if (body.ok) {
-        setResult(`Refund accepted for transaction ${transactionId}.`);
-        setTransactionId("");
-      } else {
-        setError(body.message ?? "refund request failed");
-      }
+      await apiPost("/api/payment/refund", { transactionId });
+      setResult(`Refund accepted for transaction ${transactionId}.`);
+      setTransactionId("");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -45,7 +37,7 @@ export default function RefundPage() {
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <div>
             <label className="label" htmlFor="transactionId">
               Transaction ID

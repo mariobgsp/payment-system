@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiPost } from "@/lib/shared";
 
 const DEMO_USERS = [
   { username: "klhomme0", password: "user1Pass!" },
@@ -22,23 +23,15 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const body = await res.json();
-      if (!body.ok) {
-        setError(body.message ?? "login failed");
-        return;
-      }
-      router.push("/catalog");
-      router.refresh();
+      await apiPost("/api/auth/login", { username, password });
     } catch (err) {
       setError((err as Error).message);
+      return;
     } finally {
       setLoading(false);
     }
+    router.push("/catalog");
+    router.refresh();
   }
 
   return (
@@ -51,7 +44,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <div>
             <label className="label" htmlFor="username">
               Username

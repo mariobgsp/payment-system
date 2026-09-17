@@ -2,15 +2,16 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { apiGet } from "@/lib/shared";
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((b) => router.replace(b.ok ? "/catalog" : "/login"))
-      .catch(() => router.replace("/login"));
+    apiGet("/api/auth/me").then(
+      () => router.replace("/catalog"),
+      () => router.replace("/login"),
+    );
   }, [router]);
 
   return (

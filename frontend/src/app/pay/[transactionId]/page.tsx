@@ -41,7 +41,7 @@ export default function PayPage() {
   }, [transactionId]);
 
   useEffect(() => {
-    fetchStatus();
+    void fetchStatus();
     return stopPolling;
   }, [fetchStatus]);
 
@@ -61,7 +61,7 @@ export default function PayPage() {
   async function confirmAndPoll() {
     setStep("checking");
     await fetchStatus();
-    pollRef.current = setInterval(fetchStatus, 3000);
+    pollRef.current = setInterval(() => void fetchStatus(), 3000);
   }
 
   async function refund() {
@@ -69,7 +69,7 @@ export default function PayPage() {
     setError(null);
     try {
       await apiPost("/api/payment/refund", { transactionId });
-      pollRef.current = setInterval(fetchStatus, 3000);
+      pollRef.current = setInterval(() => void fetchStatus(), 3000);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -124,7 +124,7 @@ export default function PayPage() {
       )}
 
       {step === "idle" && !trx?.paymentDate && (
-        <button className="btn-primary w-full" onClick={createPayment}>Create payment</button>
+        <button className="btn-primary w-full" onClick={() => void createPayment()}>Create payment</button>
       )}
 
       {checkoutUrl && (
@@ -132,7 +132,7 @@ export default function PayPage() {
           <p className="text-sm text-slate-300">Your payment session is ready. Open the partner payment page to confirm the payment.</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="btn-primary flex-1">Open payment page</a>
-            <button className="btn-secondary flex-1" onClick={confirmAndPoll}>I&apos;ve completed payment — check status</button>
+            <button className="btn-secondary flex-1" onClick={() => void confirmAndPoll()}>I&apos;ve completed payment — check status</button>
           </div>
           <p className="break-all font-mono text-xs text-slate-500">{checkoutUrl}</p>
         </div>
@@ -155,7 +155,7 @@ export default function PayPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary flex-1" disabled={refunding} onClick={refund}>
+            <button className="btn-secondary flex-1" disabled={refunding} onClick={() => void refund()}>
               {refunding ? "Requesting…" : "Request refund"}
             </button>
             <a className="btn-secondary flex-1" href="/refund">Go to refunds</a>

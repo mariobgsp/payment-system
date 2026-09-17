@@ -24,8 +24,10 @@ export async function proxyFetch<T>(url: string, init?: RequestInit): Promise<T>
   return unwrap<T>(url, init);
 }
 
+const jsonHeaders = { "content-type": "application/json" };
+
 export function toEnvelope<T>(ok: boolean, data: T | null, message: string, status = 200) {
-  return Response.json({ ok, data, message }, { status });
+  return new Response(JSON.stringify({ ok, data, message }), { status, headers: jsonHeaders });
 }
 
 // requireSession throws AuthError instead of returning a Response union —

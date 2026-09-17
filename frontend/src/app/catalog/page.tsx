@@ -149,7 +149,7 @@ export default function CatalogPage() {
               {placeError && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{placeError}</div>
               )}
-              <button className="btn-primary w-full" disabled={placing} onClick={placeOrder}>
+              <button className="btn-primary w-full" disabled={placing} onClick={() => void placeOrder()}>
                 {placing ? "Placing order…" : "Place order & continue to payment"}
               </button>
             </div>

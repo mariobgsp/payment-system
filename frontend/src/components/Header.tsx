@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { apiGet } from "@/lib/shared";
 
 export default function Header() {
   const router = useRouter();
   const [username, setUsername] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((b) => setUsername(b.ok ? b.data.username : null))
-      .catch(() => setUsername(null));
+    apiGet<{ username: string }>("/api/auth/me").then(
+      (data) => setUsername(data.username),
+      () => setUsername(null),
+    );
   }, []);
 
   async function logout() {
@@ -53,7 +54,7 @@ export default function Header() {
               {username}
             </span>
             <button
-              onClick={logout}
+              onClick={() => void logout()}
               className="text-sm text-slate-400 transition hover:text-slate-100"
             >
               Sign out
