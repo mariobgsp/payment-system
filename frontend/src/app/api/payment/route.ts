@@ -4,7 +4,8 @@ import { FRONTEND_URL, authCatch, backend, buildHeaders, requireSession, toEnvel
 export async function POST(req: NextRequest) {
   try {
     const { token, username } = await requireSession();
-    const { transactionId, paymentType = "SHOPEEPAY" } = (await req.json()) as {
+    const raw: unknown = await req.json();
+    const { transactionId, paymentType = "SHOPEEPAY" } = raw as {
       transactionId?: string;
       paymentType?: string;
     };

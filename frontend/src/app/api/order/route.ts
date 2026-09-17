@@ -4,7 +4,8 @@ import { authCatch, backend, buildHeaders, requireSession, toEnvelope } from "@/
 export async function POST(req: NextRequest) {
   try {
     const { token, username } = await requireSession();
-    const { productCode, productName, amount, price, enableDiscount } = (await req.json()) as {
+    const raw: unknown = await req.json();
+    const { productCode, productName, amount, price, enableDiscount } = raw as {
       productCode?: string;
       productName?: string;
       amount?: number;

@@ -4,16 +4,17 @@ import type { Product } from "./types";
 
 type BffEnvelope = { ok?: unknown; message?: unknown; data?: unknown };
 
-function unwrapBff<T>(body: BffEnvelope, path: string, method: string): T {
-  if (!body.ok) {
-    throw new Error(typeof body.message === "string" ? body.message : `${method} ${path} failed`);
+function unwrapBff<T>(raw: BffEnvelope, path: string, method: string): T {
+  if (!raw.ok) {
+    throw new Error(typeof raw.message === "string" ? raw.message : `${method} ${path} failed`);
   }
-  return body.data as T;
+  return raw.data as T;
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: "no-store" });
-  return unwrapBff<T>((await res.json()) as BffEnvelope, path, "GET");
+  const raw: unknown = await res.json();
+  return unwrapBff<T>(raw as BffEnvelope, path, "GET");
 }
 
 export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
@@ -22,7 +23,8 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return unwrapBff<T>((await res.json()) as BffEnvelope, path, "POST");
+  const raw: unknown = await res.json();
+  return unwrapBff<T>(raw as BffEnvelope, path, "POST");
 }
 
 export function totalPrice(p: Product, amount: number, enableDiscount: boolean): number {

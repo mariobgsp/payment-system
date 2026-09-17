@@ -50,7 +50,8 @@ type MonolithEnvelope = { code?: unknown; message?: unknown; data?: unknown };
 
 export async function backend<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
-  const body = (await res.json()) as MonolithEnvelope;
+  const raw: unknown = await res.json();
+  const body = raw as MonolithEnvelope;
   if (!res.ok || body.code !== "00") {
     throw new Error(typeof body.message === "string" ? body.message : `backend ${res.status}`);
   }
