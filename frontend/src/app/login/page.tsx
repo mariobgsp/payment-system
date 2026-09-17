@@ -3,6 +3,11 @@
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+}
+
 const DEMO_USERS = [
   { username: "klhomme0", password: "user1Pass!" },
   { username: "ewhicher1", password: "user2Pass!" },
@@ -27,18 +32,20 @@ export default function LoginPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const body = await res.json();
+      const raw: unknown = await res.json();
+      const body = raw as BffEnvelope;
       if (!body.ok) {
-        setError(body.message ?? "login failed");
+        setError(typeof body.message === "string" ? body.message : "login failed");
         return;
       }
-      router.push("/catalog");
-      router.refresh();
     } catch (err) {
       setError((err as Error).message);
+      return;
     } finally {
       setLoading(false);
     }
+    router.push("/catalog");
+    router.refresh();
   }
 
   return (
@@ -51,7 +58,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <div>
             <label className="label" htmlFor="username">
               Username

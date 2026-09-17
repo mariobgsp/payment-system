@@ -1,45 +1,79 @@
+import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import { MS_ORDER_URL, buildHeaders, getSession, toEnvelope } from "@/lib/api";
+
+// Self-contained BFF route (no @/lib value imports): session check, backend
+// fetch and envelope mapping inline. Keeps behavior identical to siblings.
+const BASE =
+  process.env.MS_ORDER_URL ?? process.env.MS_PAYMENT_URL ?? "http://localhost:8080";
+
+interface MonolithEnvelope {
+  code?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
+
+function headers(token?: string | null) {
+  return {
+    "content-type": "application/json",
+    "x-request-channel": "WEB",
+    "x-request-id": randomUUID(),
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function ok<T>(data: T) {
+  return Response.json({ ok: true, data, message: "ok" });
+}
+
+function fail(message: string, status: number) {
+  return Response.json({ ok: false, data: null, message }, { status });
+}
+
+async function session(): Promise<{ token: string; username: string } | null> {
+  const store = await cookies();
+  const token = store.get("ps_token")?.value ?? null;
+  const username = store.get("ps_username")?.value ?? null;
+  if (!token || !username) return null;
+  return { token, username };
+}
+
+async function backend<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, init);
+  const raw: unknown = await res.json();
+  const body = raw as MonolithEnvelope;
+  if (!res.ok || body.code !== "00") {
+    throw new Error(typeof body.message === "string" ? body.message : `backend ${res.status}`);
+  }
+  return body.data as T;
+}
 
 export async function POST(req: NextRequest) {
-  const { token, username } = await getSession();
-  if (!token || !username) {
-    return toEnvelope(false, null, "not authenticated", 401);
-  }
-
   try {
-    const { productCode, productName, amount, price, enableDiscount } =
-      await req.json();
+    const sess = await session();
+    if (!sess) return fail("not authenticated", 401);
+    const { token, username } = sess;
+    const raw: unknown = await req.json();
+    const { productCode, productName, amount, price, enableDiscount } = raw as {
+      productCode?: string;
+      productName?: string;
+      amount?: number;
+      price?: number;
+      enableDiscount?: boolean;
+    };
     if (!productCode || !productName || !amount || amount < 1 || !price) {
-      return toEnvelope(false, null, "invalid order payload", 400);
+      return fail("invalid order payload", 400);
     }
-
-    const url = new URL(`${MS_ORDER_URL}/ms/api/v1/order/product`);
-    url.searchParams.set("username", username);
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: buildHeaders(token),
-      body: JSON.stringify({
-        productCode,
-        productName,
-        amount,
-        price,
-        enableDiscount,
-        userDetail: { username },
-      }),
-    });
-    const body = await res.json();
-    if (!res.ok || body.code !== "00") {
-      return toEnvelope(
-        false,
-        null,
-        body.message ?? "failed to create order",
-        400,
-      );
-    }
-    return toEnvelope(true, body.data, "ok");
+    const data = await backend(
+      `/ms/api/v1/order/product?username=${encodeURIComponent(username)}`,
+      {
+        method: "POST",
+        headers: headers(token),
+        body: JSON.stringify({ productCode, productName, amount, price, enableDiscount, userDetail: { username } }),
+      },
+    );
+    return ok(data);
   } catch (e) {
-    return toEnvelope(false, null, (e as Error).message, 500);
+    return fail(e instanceof Error ? e.message : "failed to create order", 400);
   }
 }

@@ -3,6 +3,11 @@
 import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+}
+
 export default function RefundPage() {
   const router = useRouter();
   const [transactionId, setTransactionId] = useState("");
@@ -21,12 +26,13 @@ export default function RefundPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ transactionId }),
       });
-      const body = await res.json();
+      const raw: unknown = await res.json();
+      const body = raw as BffEnvelope;
       if (body.ok) {
         setResult(`Refund accepted for transaction ${transactionId}.`);
         setTransactionId("");
       } else {
-        setError(body.message ?? "refund request failed");
+        setError(typeof body.message === "string" ? body.message : "refund request failed");
       }
     } catch (err) {
       setError((err as Error).message);
@@ -45,7 +51,7 @@ export default function RefundPage() {
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <div>
             <label className="label" htmlFor="transactionId">
               Transaction ID

@@ -1,39 +1,53 @@
+import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import { MS_ORDER_URL, buildHeaders, getSession, toEnvelope } from "@/lib/api";
+
+// Self-contained BFF route (no @/lib value imports): session check, backend
+// fetch and envelope mapping inline. Keeps behavior identical to siblings.
+const BASE =
+  process.env.MS_ORDER_URL ?? process.env.MS_PAYMENT_URL ?? "http://localhost:8080";
+
+interface MonolithEnvelope {
+  code?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
 
 export async function GET(req: NextRequest) {
-  const { token, username } = await getSession();
-  if (!token || !username) {
-    return toEnvelope(false, null, "not authenticated", 401);
-  }
-
-  const transactionId = req.nextUrl.searchParams.get("transactionId");
-  if (!transactionId) {
-    return toEnvelope(false, null, "transactionId is required", 400);
-  }
-
-  const url = new URL(
-    `${MS_ORDER_URL}/ms/api/v1/order/${encodeURIComponent(transactionId)}/check`,
-  );
-  url.searchParams.set("username", username);
-
   try {
-    const res = await fetch(url, {
-      headers: buildHeaders(token),
-      cache: "no-store",
-    });
-    const body = await res.json();
-    if (!res.ok || body.code !== "00") {
-      return toEnvelope(
-        false,
-        null,
-        body.message ?? "transaction not found",
-        404,
-      );
+    const store = await cookies();
+    const token = store.get("ps_token")?.value ?? null;
+    const username = store.get("ps_username")?.value ?? null;
+    if (!token || !username) {
+      return Response.json({ ok: false, data: null, message: "not authenticated" }, { status: 401 });
     }
-    const list = body.data ?? [];
-    return toEnvelope(true, list.length > 0 ? list[0] : null, "ok");
+    const transactionId = req.nextUrl.searchParams.get("transactionId");
+    if (!transactionId) {
+      return Response.json({ ok: false, data: null, message: "transactionId is required" }, { status: 400 });
+    }
+    const res = await fetch(
+      `${BASE}/ms/api/v1/order/${encodeURIComponent(transactionId)}/check?username=${encodeURIComponent(username)}`,
+      {
+        headers: {
+          "content-type": "application/json",
+          "x-request-channel": "WEB",
+          "x-request-id": randomUUID(),
+          authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      },
+    );
+    const raw: unknown = await res.json();
+    const body = raw as MonolithEnvelope;
+    if (!res.ok || body.code !== "00") {
+      throw new Error(typeof body.message === "string" ? body.message : "transaction not found");
+    }
+    const list = body.data as unknown[];
+    return Response.json({ ok: true, data: Array.isArray(list) ? (list[0] ?? null) : list, message: "ok" });
   } catch (e) {
-    return toEnvelope(false, null, (e as Error).message, 500);
+    return Response.json(
+      { ok: false, data: null, message: e instanceof Error ? e.message : "transaction not found" },
+      { status: 404 },
+    );
   }
 }

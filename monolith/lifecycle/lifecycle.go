@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ApiError — Interface part callers must know (code, message, status mapping).
+// ApiError — callers map Code to envelope.
 type ApiError struct {
 	Code    int
 	Message string
@@ -20,30 +20,27 @@ type ApiError struct {
 
 func (e *ApiError) Error() string { return e.Message }
 
-func errBadRequest(msg string) *ApiError   { return &ApiError{Code: 400, Message: msg} }
-func errNotFound(msg string) *ApiError     { return &ApiError{Code: 404, Message: msg} }
-func errConflict(msg string) *ApiError     { return &ApiError{Code: 409, Message: msg} }
-func errUnauthorized(msg string) *ApiError { return &ApiError{Code: 401, Message: msg} }
+// Module prefix LC: answers "which part failed" in one line.
+func errBadRequest(msg string) *ApiError   { return &ApiError{Code: 400, Message: "LC: " + msg} }
+func errNotFound(msg string) *ApiError     { return &ApiError{Code: 404, Message: "LC: " + msg} }
+func errConflict(msg string) *ApiError     { return &ApiError{Code: 409, Message: "LC: " + msg} }
+func errUnauthorized(msg string) *ApiError { return &ApiError{Code: 401, Message: "LC: " + msg} }
 
-// Exported for handlers — Interface part.
 func NewBadRequest(msg string) *ApiError   { return errBadRequest(msg) }
 func NewNotFound(msg string) *ApiError     { return errNotFound(msg) }
 func NewConflict(msg string) *ApiError     { return errConflict(msg) }
 func NewUnauthorized(msg string) *ApiError { return errUnauthorized(msg) }
 
-// Service is TransactionLifecycle deep Module seam.
-// Small Interface, substantial hidden behaviour (pricing, state chart, idempotency, authz, outbox).
+// Service is TransactionLifecycle seam: pricing, state chart, idempotency, authz, outbox.
 type Service struct {
 	store Store
 }
 
-// Store aliases internal seam for test injectability (Local-substitutable).
 type Store = store.Store
 
 func New(s Store) *Service      { return &Service{store: s} }
 func (s *Service) Store() Store { return s.store }
 
-// Status constants — G25: replace magic numbers/strings
 const (
 	StatusCreated   = "CREATED"
 	StatusReady     = "READY"
@@ -53,23 +50,6 @@ const (
 	StatusRefund    = "REFUND"
 )
 
-// Primitive Obsession: wrap transaction/idempotency primitives for type safety
-type TransactionID string
-type IdempotencyKey string
-
-// Data Clumps: bundle product/user refs
-type ProductRef struct {
-	Code, Name     string
-	Price          int64
-	Discount       float64
-	EnableDiscount bool
-}
-type UserRef struct {
-	Username, UserID string
-}
-
-// --- Interface types ---
-
 type CreateCmd struct {
 	Username       string
 	UserID         string
@@ -78,7 +58,7 @@ type CreateCmd struct {
 	Price          int64
 	Amount         int64
 	EnableDiscount bool
-	Discount       float64 // from Product row
+	Discount       float64
 }
 
 type ChargeRs struct {
@@ -89,17 +69,16 @@ type ChargeRs struct {
 }
 
 type CallbackEvt struct {
-	ReferenceID string `json:"referenceId"` // transactionId
-	Status      string `json:"status"`      // SUCCEEDED / FAILED
+	ReferenceID string `json:"referenceId"`
+	Status      string `json:"status"` // SUCCEEDED / FAILED
 }
 
 type RefundRs struct {
 	ID            string `json:"id"`
 	TransactionID string `json:"transactionId"`
-	Status        string `json:"status"` // REFUND
+	Status        string `json:"status"`
 }
 
-// state chart — uses named constants, G25 fix
 var transitions = map[string]map[string]string{
 	StatusCreated:   {"charge": StatusReady},
 	StatusReady:     {"callback_success": StatusSuccess, "callback_failed": StatusFailed, "timeout": StatusFailed},
@@ -108,46 +87,52 @@ var transitions = map[string]map[string]string{
 }
 
 func validateTransition(old, event string) (string, error) {
-	m, ok := transitions[old]
-	if !ok {
-		return "", errConflict(fmt.Sprintf("no transitions from %s", old))
-	}
-	nxt, ok := m[event]
+	nxt, ok := transitions[old][event]
 	if !ok {
 		return "", errConflict(fmt.Sprintf("invalid event %s from %s", event, old))
 	}
 	return nxt, nil
 }
 
-// Check verifies ownership — authz at seam.
-func (s *Service) Check(ctx context.Context, txId, callerUserId string) (*store.ProductTrx, error) {
-	trx, err := s.store.FindTxForUpdate(ctx, txId)
+// findTx returns trx or NotFound — replaces 4x if err-or-nil chains.
+func (s *Service) findTx(ctx context.Context, txID string) (*store.ProductTrx, error) {
+	trx, err := s.store.FindTxForUpdate(ctx, txID)
+	if err != nil || trx == nil {
+		return nil, errNotFound("transaction not found")
+	}
+	return trx, nil
+}
+
+func cachedTrx(ctx context.Context, st Store, key string) *store.ProductTrx {
+	if key == "" {
+		return nil
+	}
+	cached, _ := st.GetIdempotency(ctx, key)
+	if cached == "" || cached == "{}" {
+		return nil
+	}
+	var trx store.ProductTrx
+	if err := json.Unmarshal([]byte(cached), &trx); err != nil {
+		return nil
+	}
+	return &trx
+}
+
+func (s *Service) Check(ctx context.Context, txID, callerUserID string) (*store.ProductTrx, error) {
+	trx, err := s.findTx(ctx, txID)
 	if err != nil {
-		return nil, errNotFound("transaction not found")
+		return nil, err
 	}
-	if trx == nil {
-		return nil, errNotFound("transaction not found")
-	}
-	if trx.UserID != callerUserId {
+	if trx.UserID != callerUserID {
 		return nil, errUnauthorized("unauthorized: transaction does not belong to caller")
 	}
 	return trx, nil
 }
 
-// CreateOrderWithIdempotency — idempotent via Idempotency-Key header. Pricing inside Lifecycle (deep).
-// Stores ProductTrx CREATED + outbox(servicelogs) atomically. N7: name describes side-effect (insert + idempotency).
+// CreateOrder — idempotent via Idempotency-Key, pricing inside. Stores CREATED + outbox atomically.
 func (s *Service) CreateOrder(ctx context.Context, cmd CreateCmd, idemKey string) (*store.ProductTrx, error) {
-	return s.CreateOrderWithIdempotency(ctx, cmd, IdempotencyKey(idemKey))
-}
-func (s *Service) CreateOrderWithIdempotency(ctx context.Context, cmd CreateCmd, idemKey IdempotencyKey) (*store.ProductTrx, error) {
-	keyStr := string(idemKey)
-	if keyStr != "" {
-		if cached, _ := s.store.GetIdempotency(ctx, keyStr); cached != "" && cached != "{}" {
-			var trx store.ProductTrx
-			if err := json.Unmarshal([]byte(cached), &trx); err == nil {
-				return &trx, nil
-			}
-		}
+	if trx := cachedTrx(ctx, s.store, idemKey); trx != nil {
+		return trx, nil
 	}
 	if cmd.Username == "" || cmd.ProductCode == "" || cmd.Amount <= 0 || cmd.Price <= 0 {
 		return nil, errBadRequest("invalid order payload")
@@ -158,96 +143,71 @@ func (s *Service) CreateOrderWithIdempotency(ctx context.Context, cmd CreateCmd,
 	}
 	now := time.Now()
 	trx := store.ProductTrx{
-		ID:              "MSO-" + uuid.NewString(),
-		TransactionID:   "PTRX-" + uuid.NewString()[:8],
-		OrderStatus:     StatusCreated,
-		PaymentStatus:   StatusCreated,
-		UserID:          cmd.UserID,
-		ProductName:     cmd.ProductName,
-		Amount:          cmd.Amount,
-		Price:           cmd.Price,
-		PriceCharge:     priceCharge,
-		ProductCode:     cmd.ProductCode,
-		DiscountEnabled: cmd.EnableDiscount,
-		Discount:        cmd.Discount,
-		SysCreationDate: &now,
+		ID: "MSO-" + uuid.NewString(), TransactionID: "PTRX-" + uuid.NewString()[:8],
+		OrderStatus: StatusCreated, PaymentStatus: StatusCreated,
+		UserID: cmd.UserID, ProductName: cmd.ProductName, Amount: cmd.Amount,
+		Price: cmd.Price, PriceCharge: priceCharge, ProductCode: cmd.ProductCode,
+		DiscountEnabled: cmd.EnableDiscount, Discount: cmd.Discount, SysCreationDate: &now,
 	}
 	ob := s.createOutbox(trx.TransactionID, "servicelogs", map[string]any{"op": "createOrder", "txId": trx.TransactionID})
-	if err := s.store.InsertTxWithOutbox(ctx, trx, ob, keyStr); err != nil {
-		if keyStr != "" && errors.Is(err, store.ErrIdempotencyExists) {
+	if err := s.store.InsertTxWithOutbox(ctx, trx, ob, idemKey); err != nil {
+		if idemKey != "" && errors.Is(err, store.ErrIdempotencyExists) {
 			for i := 0; i < 5; i++ {
-				if cached, _ := s.store.GetIdempotency(ctx, keyStr); cached != "" && cached != "{}" {
-					var existing store.ProductTrx
-					if err2 := json.Unmarshal([]byte(cached), &existing); err2 == nil {
-						return &existing, nil
-					}
+				if existing := cachedTrx(ctx, s.store, idemKey); existing != nil && existing.TransactionID != "" {
+					return existing, nil
 				}
 				time.Sleep(time.Duration(i+1) * 10 * time.Millisecond)
-			}
-			if cached, _ := s.store.GetIdempotency(ctx, keyStr); cached != "" {
-				var existing store.ProductTrx
-				if err2 := json.Unmarshal([]byte(cached), &existing); err2 == nil && existing.TransactionID != "" {
-					return &existing, nil
-				}
 			}
 		}
 		return nil, errConflict("duplicate transaction or idempotency conflict — retry")
 	}
-	if keyStr != "" {
+	if idemKey != "" {
 		b, _ := json.Marshal(trx)
-		_ = s.store.PutIdempotency(ctx, keyStr, string(b))
+		_ = s.store.PutIdempotency(ctx, idemKey, string(b))
 	}
 	return &trx, nil
 }
 
-// Charge — idempotent via TransactionID natural key. CREATED→READY.
-func (s *Service) Charge(ctx context.Context, transactionId string) (*ChargeRs, error) {
-	return s.ChargeWithID(ctx, TransactionID(transactionId))
-}
-func (s *Service) ChargeWithID(ctx context.Context, tid TransactionID) (*ChargeRs, error) {
-	idStr := string(tid)
-	trx, err := s.store.FindTxForUpdate(ctx, idStr)
-	if err != nil || trx == nil {
-		return nil, errNotFound("transaction not found")
+// Charge — idempotent via TransactionID. CREATED→READY.
+func (s *Service) Charge(ctx context.Context, transactionID string) (*ChargeRs, error) {
+	trx, err := s.findTx(ctx, transactionID)
+	if err != nil {
+		return nil, err
 	}
 	if trx.PaymentStatus == StatusReady {
-		return &ChargeRs{ID: "pgr_" + trx.TransactionID, TransactionID: trx.TransactionID, Status: StatusReady, CheckoutURL: fmt.Sprintf("/pay/%s", trx.TransactionID)}, nil
+		return &ChargeRs{ID: "pgr_" + trx.TransactionID, TransactionID: trx.TransactionID, Status: StatusReady, CheckoutURL: "/pay/" + trx.TransactionID}, nil
 	}
 	nxt, err := validateTransition(trx.PaymentStatus, "charge")
 	if err != nil {
 		return nil, err
 	}
-	ob := s.createOutbox(idStr, "servicelogs", map[string]any{"op": "charge", "txId": idStr, "next": nxt})
-	if err := s.store.UpdateStatusWithOutbox(ctx, idStr, StatusReady, nxt, ob); err != nil {
+	ob := s.createOutbox(transactionID, "servicelogs", map[string]any{"op": "charge", "txId": transactionID, "next": nxt})
+	if err := s.store.UpdateStatusWithOutbox(ctx, transactionID, StatusReady, nxt, ob); err != nil {
 		return nil, errConflict("failed to transition to READY")
 	}
-	return &ChargeRs{ID: "pgr_" + idStr, TransactionID: idStr, Status: nxt, CheckoutURL: fmt.Sprintf("/pay/%s", idStr)}, nil
+	return &ChargeRs{ID: "pgr_" + transactionID, TransactionID: transactionID, Status: nxt, CheckoutURL: "/pay/" + transactionID}, nil
 }
 
-// OnCallback — READY→SUCCESS/FAILED. Writes outbox for invoice (ms-notify-payment) + logs atomically.
+// OnCallback — READY→SUCCESS/FAILED + invoice outbox atomically.
 func (s *Service) OnCallback(ctx context.Context, evt CallbackEvt) error {
 	if evt.ReferenceID == "" || (evt.Status != "SUCCEEDED" && evt.Status != "FAILED") {
 		return errBadRequest("invalid callback")
 	}
-	trx, err := s.store.FindTxForUpdate(ctx, evt.ReferenceID)
-	if err != nil || trx == nil {
-		return errNotFound("transaction not found")
+	trx, err := s.findTx(ctx, evt.ReferenceID)
+	if err != nil {
+		return err
 	}
 	if trx.PaymentStatus == StatusSuccess || trx.PaymentStatus == StatusPublished {
 		return nil
 	}
-	event := "callback_success"
-	nxt := StatusSuccess
-	obTopic := "ms-notify-payment"
+	event, nxt, topic := "callback_success", StatusSuccess, "ms-notify-payment"
 	if evt.Status == StatusFailed {
-		event = "callback_failed"
-		nxt = StatusFailed
-		obTopic = "servicelogs"
+		event, nxt, topic = "callback_failed", StatusFailed, "servicelogs"
 	}
 	if _, err := validateTransition(trx.PaymentStatus, event); err != nil {
 		return err
 	}
-	ob := s.createOutbox(evt.ReferenceID, obTopic, map[string]any{"transactionId": evt.ReferenceID, "status": nxt})
+	ob := s.createOutbox(evt.ReferenceID, topic, map[string]any{"transactionId": evt.ReferenceID, "status": nxt})
 	orderStatus := StatusPublished
 	if nxt == StatusFailed {
 		orderStatus = trx.OrderStatus
@@ -255,36 +215,24 @@ func (s *Service) OnCallback(ctx context.Context, evt CallbackEvt) error {
 	return s.store.UpdateStatusWithOutbox(ctx, evt.ReferenceID, orderStatus, nxt, ob)
 }
 
-// Refund — SUCCESS/PUBLISHED→REFUND, full amount only. ponytail: partial when finance requests.
-func (s *Service) Refund(ctx context.Context, transactionId string) (*RefundRs, error) {
-	return s.RefundWithID(ctx, TransactionID(transactionId))
-}
-func (s *Service) RefundWithID(ctx context.Context, tid TransactionID) (*RefundRs, error) {
-	idStr := string(tid)
-	trx, err := s.store.FindTxForUpdate(ctx, idStr)
-	if err != nil || trx == nil {
-		return nil, errNotFound("transaction not found")
+// Refund — SUCCESS/PUBLISHED→REFUND, full amount only.
+func (s *Service) Refund(ctx context.Context, transactionID string) (*RefundRs, error) {
+	trx, err := s.findTx(ctx, transactionID)
+	if err != nil {
+		return nil, err
 	}
 	nxt, err := validateTransition(trx.PaymentStatus, "refund")
 	if err != nil {
 		return nil, errConflict("charge is not in a refundable state")
 	}
-	ob := s.createOutbox(idStr, "ms-notify-payment", map[string]any{"transactionId": idStr, "op": "refund", "amount": trx.PriceCharge})
-	if err := s.store.UpdateStatusWithOutbox(ctx, idStr, trx.OrderStatus, nxt, ob); err != nil {
+	ob := s.createOutbox(transactionID, "ms-notify-payment", map[string]any{"transactionId": transactionID, "op": "refund", "amount": trx.PriceCharge})
+	if err := s.store.UpdateStatusWithOutbox(ctx, transactionID, trx.OrderStatus, nxt, ob); err != nil {
 		return nil, errConflict("refund transition failed")
 	}
-	return &RefundRs{ID: "pgr_" + uuid.NewString(), TransactionID: idStr, Status: nxt}, nil
+	return &RefundRs{ID: "pgr_" + uuid.NewString(), TransactionID: transactionID, Status: nxt}, nil
 }
 
-func (s *Service) createOutbox(txId, topic string, payload any) *store.Outbox {
+func (s *Service) createOutbox(txID, topic string, payload any) *store.Outbox {
 	b, _ := json.Marshal(payload)
-	return &store.Outbox{
-		ID:          uuid.NewString(),
-		AggregateID: txId,
-		Topic:       topic,
-		Payload:     b,
-		CreatedAt:   time.Now(),
-	}
+	return &store.Outbox{ID: uuid.NewString(), AggregateID: txID, Topic: topic, Payload: b, CreatedAt: time.Now()}
 }
-
-var _ = errors.New

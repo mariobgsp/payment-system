@@ -22,11 +22,11 @@ func WriteFile(ctx context.Context, s store.Store, payload []byte, dir string) (
 		TransactionID string `json:"transactionId"`
 	}
 	if err := json.Unmarshal(payload, &evt); err != nil || evt.TransactionID == "" {
-		return "", fmt.Errorf("invalid invoice payload")
+		return "", fmt.Errorf("INV: invalid invoice payload")
 	}
 	trx, err := s.FindTxForUpdate(ctx, evt.TransactionID)
 	if err != nil || trx == nil {
-		return "", fmt.Errorf("transaction not found: %s", evt.TransactionID)
+		return "", fmt.Errorf("INV: transaction not found: %s", evt.TransactionID)
 	}
 	safe := safeTx.ReplaceAllString(evt.TransactionID, "")
 	if dir == "" {

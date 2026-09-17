@@ -2,12 +2,12 @@
 
 ## Overview
 
-Go payment system with a modern web frontend — the **Go monolith** (`monolith/`) deepens the payment lifecycle into a single `TransactionLifecycle` Module. Java services are decommissioned (frozen source, not run).
+Go payment system with a modern web frontend — the **Go monolith** (`monolith/`) deepens the payment lifecycle into a single `TransactionLifecycle` Module.
 
 * **frontend** - Next.js (App Router) web portal: login, product catalog, order placement, payment checkout, status tracking and refunds
 * **monolith** - **Go (primary)** — `TransactionLifecycle` deep Module: order → charge → callback → refund, idempotency, authz, pricing, HMAC-verified callbacks, partner charge via `api-key`, invoice worker (outbox → receipt files), log query API (`GET /v1/logs`) + retention, outbox poller with DLQ + sweeper. Single binary, PG `transaction` + `store` schemas, Redis
 * **ms-paymentagr** - Go/Gin + Redis: dummy payment partner (charge, refund, redirect/checkout page, HMAC-signed callbacks)
-* **ms-order / ms-payment / ms-invoice / ms-logger** - Java/Spring (decommissioned): frozen source kept for audit; replaced by monolith + PG outbox. Kafka/Mongo/ZK removed from compose
+* Java/Spring services removed — were decommissioned, replaced by monolith + PG outbox. Git history preserves them for audit (`git log -- ms-order`). Kafka/Mongo/ZK removed from compose
 
 ## Architecture Diagrams
 
@@ -41,7 +41,16 @@ Legacy references: `payment-system-diagram.jpg` (original Java microservices), `
 * Redis - sessions / partner TTL
 * Next.js 16 + TypeScript + Tailwind CSS - web frontend (pointed at `monolith:8085`)
 * Docker Compose - 5 containers (`postgres+redis+ms-paymentagr+monolith+frontend`)
-* Java Spring Boot 17 - decommissioned (`ms-order`, `ms-payment`, `ms-logger`, `ms-invoice` frozen, not run); Kafka/Mongo/ZK removed
+
+## Code map (where things live)
+
+* `monolith/cmd/` — `main.go` wiring, `routes.go` table (all endpoints), `handlers.go` new API, `legacy.go` ms-* compat, `http.go` envelopes + partner + outbox transport
+* `monolith/lifecycle/` — `lifecycle.go` state chart + idempotency, `pricing.go` discount math
+* `monolith/store/` — `store.go` types, `pg.go` prod, `memory.go` fake
+* `monolith/jobs/` — `outbox.go` poller + retry, `sweeper.go` stale READY→FAILED
+* `monolith/invoice/` + `invoiceworker/` — receipt files, split hatch via `INVOICE_URL`
+* `ms-paymentagr/usecase/` — `adapter.go` charge/refund, `store.go` redis/memory, `notify.go` callbacks
+* `frontend/src/lib/` — `gateway.ts` backend client, `api.ts` BFF helpers (`requireSession`, `backend`), `shared.ts` fetch + pricing + status colors
 
 ## Getting Started
 
@@ -105,19 +114,30 @@ docker compose down
 
 * **Authenticated payment callbacks** - ms-paymentagr signs every callback with HMAC-SHA256 (`NOTIFY_SECRET` + timestamp); monolith verifies signature and 300s replay window before accepting (401 on forgery; open only when `NOTIFY_SECRET` is unset for local dev)
 * **API key protection** - ms-paymentagr charge/refund endpoints require the `api-key` header (`PARTNER_API_KEY`); monolith sends it on partner charge calls
-* **Session-based auth** - ms-order issues short-lived opaque session tokens (in-memory, TTL); order placement accepts `Authorization: Bearer` tokens
+* **Session-based auth** - monolith identity issues short-lived opaque session tokens (in-memory, TTL); order placement accepts `Authorization: Bearer` tokens
 * **Password hashing** - BCrypt for new credentials, legacy HMAC verification kept for backward compatibility
 * **Login rate limiting** - per user/IP attempts (10 / 15 minutes)
 * **No credential leakage** - user detail responses never expose password hashes or stored tokens
 * **Parameterized SQL** - all queries use prepared statements; the previous string-replace query pattern was removed
 * **Secrets via environment** - no hardcoded credentials in source or compose; `.env` is gitignored, a `.env.example` template is provided
 * **Path traversal protection** - invoice filenames sanitize the transaction id
-* **Kafka reliability** - consumers acknowledge only after processing (no lost events)
+* **Outbox reliability** - poller retries 3x with backoff, then terminal DLQ (`dlq.*`, never redelivered)
 * **Dependency updates** - gson 2.11, gin 1.10, go-redis 9.5, x/net 0.25, JasperReports 6.21.4, Next.js 16 (npm audit clean)
 * **Container hardening** - all containers run as non-root users; infra ports bind to `127.0.0.1` only
 * **Security headers** - CORS allowlist plus `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Referrer-Policy`, `Cache-Control: no-store`
 * **Removed attack surface** - unauthenticated log-publish endpoint removed, partner `/payments/test` endpoint removed
 * **Live DB data no longer committed** - `project/db-data/` is removed from the repository
+
+## Split trigger (measured, not anticipated)
+
+The monolith stays one binary until a measurement says otherwise. Split a module out
+(cheapest first: invoice via `project/docker-compose.split.yml`) only when one of these holds:
+
+* one module's change rate dominates commits and causes merge contention in `monolith/`;
+* a module's resource profile diverges (e.g. invoice CPU/RAM vs lifecycle) under load test;
+* a crash in one module takes down the others in production (blast-radius event).
+
+Do not split for code size alone — total tokens don't shrink, they scatter across repos.
 
 ## Testing
 

@@ -5,6 +5,26 @@ import { useRouter } from "next/navigation";
 import type { Product } from "@/lib/types";
 import { formatIdr } from "@/lib/format";
 
+interface BffEnvelope {
+  ok?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
+
+// Local fetch helper (no cross-file value imports): GET/POST + envelope check.
+async function bff<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, init);
+  const raw: unknown = await res.json();
+  const body = raw as BffEnvelope;
+  if (!body.ok) throw new Error(typeof body.message === "string" ? body.message : `${path} failed`);
+  return body.data as T;
+}
+
+function totalPrice(p: Product, amount: number, enableDiscount: boolean): number {
+  const unit = p.discountAvailable && enableDiscount ? p.price * (1 - p.discount) : p.price;
+  return Math.round(unit) * amount;
+}
+
 interface OrderDraft {
   product: Product;
   amount: number;
@@ -21,41 +41,26 @@ export default function CatalogPage() {
   const [placeError, setPlaceError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((b) => {
-        if (!b.ok) {
-          router.replace("/login");
-          return;
-        }
-        return fetch("/api/products", { cache: "no-store" });
-      })
-      .then((res) => res?.json())
-      .then((b) => {
-        if (b && !b.ok) {
-          setError(b.message ?? "failed to load products");
-        } else if (b) {
-          setProducts(b.data ?? []);
-        }
-      })
-      .catch((err) => setError((err as Error).message))
-      .finally(() => setLoading(false));
+    void (async () => {
+      try {
+        await bff("/api/auth/me");
+        setProducts(await bff<Product[]>("/api/products"));
+      } catch (err) {
+        const msg = (err as Error).message;
+        if (msg.includes("not authenticated")) router.replace("/login");
+        else setError(msg);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [router]);
-
-  function totalPrice(p: Product, amount: number, enableDiscount: boolean) {
-    let price = p.price;
-    if (p.discountAvailable && enableDiscount) {
-      price = p.price - Math.round((p.price * p.discount * 100) / 100);
-    }
-    return price * amount;
-  }
 
   async function placeOrder() {
     if (!draft) return;
     setPlacing(true);
     setPlaceError(null);
     try {
-      const res = await fetch("/api/order", {
+      const data = await bff<{ transactionId: string }>("/api/order", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -66,16 +71,8 @@ export default function CatalogPage() {
           enableDiscount: draft.enableDiscount,
         }),
       });
-      const body = await res.json();
-      if (!body.ok) {
-        setPlaceError(body.message ?? "failed to place order");
-        return;
-      }
-      sessionStorage.setItem(
-        `order_${body.data.transactionId}`,
-        JSON.stringify({ ...draft, productName: draft.product.productName }),
-      );
-      router.push(`/pay/${body.data.transactionId}`);
+      sessionStorage.setItem(`order_${data.transactionId}`, JSON.stringify({ ...draft, productName: draft.product.productName }));
+      router.push(`/pay/${data.transactionId}`);
     } catch (err) {
       setPlaceError((err as Error).message);
     } finally {
@@ -103,13 +100,8 @@ export default function CatalogPage() {
     <div>
       <div className="mb-8 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">
-            Product catalog
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Select a product, choose quantity and place an order to start the
-            payment flow.
-          </p>
+          <h1 className="text-2xl font-semibold text-slate-100">Product catalog</h1>
+          <p className="mt-1 text-sm text-slate-400">Select a product, choose quantity and place an order to start the payment flow.</p>
         </div>
       </div>
 
@@ -119,9 +111,7 @@ export default function CatalogPage() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="font-medium text-slate-100">{p.productName}</h3>
-                <p className="mt-0.5 font-mono text-xs text-slate-500">
-                  {p.productCode}
-                </p>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">{p.productCode}</p>
               </div>
               {p.discountAvailable && (
                 <span className="rounded-full bg-mint-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-mint-400">
@@ -129,24 +119,14 @@ export default function CatalogPage() {
                 </span>
               )}
             </div>
-
             <div className="flex items-end justify-between">
-              <span className="font-mono text-lg font-semibold text-slate-100">
-                {formatIdr(p.price)}
-              </span>
+              <span className="font-mono text-lg font-semibold text-slate-100">{formatIdr(p.price)}</span>
             </div>
-
             <div className="flex items-center justify-between gap-3 border-t border-ink-700 pt-3">
               <button
                 className="btn-secondary px-3 py-1.5"
                 disabled={placing}
-                onClick={() =>
-                  setDraft({
-                    product: p,
-                    amount: 1,
-                    enableDiscount: p.discountAvailable,
-                  })
-                }
+                onClick={() => setDraft({ product: p, amount: 1, enableDiscount: p.discountAvailable })}
               >
                 Order
               </button>
@@ -156,31 +136,15 @@ export default function CatalogPage() {
       </div>
 
       {draft && (
-        <div
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setDraft(null)}
-        >
-          <div
-            className="card w-full max-w-md space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" onClick={() => setDraft(null)}>
+          <div className="card w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-100">
-                  Place order
-                </h2>
-                <p className="mt-0.5 font-mono text-xs text-slate-500">
-                  {draft.product.productCode}
-                </p>
+                <h2 className="text-lg font-semibold text-slate-100">Place order</h2>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">{draft.product.productCode}</p>
               </div>
-              <button
-                className="text-slate-500 hover:text-slate-200"
-                onClick={() => setDraft(null)}
-              >
-                ✕
-              </button>
+              <button className="text-slate-500 hover:text-slate-200" onClick={() => setDraft(null)}>✕</button>
             </div>
-
             <div className="space-y-4">
               <div>
                 <label className="label">Quantity</label>
@@ -190,58 +154,26 @@ export default function CatalogPage() {
                   max={100}
                   className="input"
                   value={draft.amount}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      amount: Math.max(1, Number(e.target.value) || 1),
-                    })
-                  }
+                  onChange={(e) => setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) })}
                 />
               </div>
-
               {draft.product.discountAvailable && (
                 <label className="flex cursor-pointer items-center justify-between rounded-lg border border-ink-600 bg-ink-900 px-3 py-2.5">
-                  <span className="text-sm text-slate-300">
-                    Apply {Math.round(draft.product.discount * 100)}% discount
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={draft.enableDiscount}
-                    onChange={(e) =>
-                      setDraft({ ...draft, enableDiscount: e.target.checked })
-                    }
-                    className="h-4 w-4 accent-mint-500"
-                  />
+                  <span className="text-sm text-slate-300">Apply {Math.round(draft.product.discount * 100)}% discount</span>
+                  <input type="checkbox" checked={draft.enableDiscount} onChange={(e) => setDraft({ ...draft, enableDiscount: e.target.checked })} className="h-4 w-4 accent-mint-500" />
                 </label>
               )}
-
               <div className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900 px-3 py-2.5">
                 <span className="text-sm text-slate-400">Total</span>
                 <span className="font-mono text-lg font-semibold text-mint-400">
-                  {formatIdr(
-                    totalPrice(
-                      draft.product,
-                      draft.amount,
-                      draft.enableDiscount,
-                    ),
-                  )}
+                  {formatIdr(totalPrice(draft.product, draft.amount, draft.enableDiscount))}
                 </span>
               </div>
-
               {placeError && (
-                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                  {placeError}
-                </div>
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{placeError}</div>
               )}
-
-              <button
-                className="btn-primary w-full"
-                disabled={placing}
-                onClick={placeOrder}
-              >
-                {placing
-                  ? "Placing order…"
-                  : "Place order & continue to payment"}
+              <button className="btn-primary w-full" disabled={placing} onClick={() => void placeOrder()}>
+                {placing ? "Placing order…" : "Place order & continue to payment"}
               </button>
             </div>
           </div>

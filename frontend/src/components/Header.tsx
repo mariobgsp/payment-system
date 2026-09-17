@@ -4,14 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+interface MeEnvelope {
+  ok?: unknown;
+  data?: { username?: string } | null;
+}
+
 export default function Header() {
   const router = useRouter();
   const [username, setUsername] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((b) => setUsername(b.ok ? b.data.username : null))
+      .then(async (r): Promise<MeEnvelope> => (await r.json()) as MeEnvelope)
+      .then((b) => setUsername(typeof b.data?.username === "string" ? b.data.username : null))
       .catch(() => setUsername(null));
   }, []);
 
@@ -53,7 +58,7 @@ export default function Header() {
               {username}
             </span>
             <button
-              onClick={logout}
+              onClick={() => void logout()}
               className="text-sm text-slate-400 transition hover:text-slate-100"
             >
               Sign out

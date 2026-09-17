@@ -1,34 +1,51 @@
+import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import {
-  MS_PAYMENT_URL,
-  buildHeaders,
-  getSession,
-  toEnvelope,
-} from "@/lib/api";
+
+// Self-contained BFF route (no @/lib value imports): session check, backend
+// fetch and envelope mapping inline. Keeps behavior identical to siblings.
+const BASE =
+  process.env.MS_ORDER_URL ?? process.env.MS_PAYMENT_URL ?? "http://localhost:8080";
+
+interface MonolithEnvelope {
+  code?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
 
 export async function POST(req: NextRequest) {
-  const { token, username } = await getSession();
-  if (!token || !username) {
-    return toEnvelope(false, null, "not authenticated", 401);
-  }
-
   try {
-    const { transactionId } = await req.json();
-    if (!transactionId) {
-      return toEnvelope(false, null, "transactionId is required", 400);
+    const store = await cookies();
+    const token = store.get("ps_token")?.value ?? null;
+    const username = store.get("ps_username")?.value ?? null;
+    if (!token || !username) {
+      return Response.json({ ok: false, data: null, message: "not authenticated" }, { status: 401 });
     }
-
-    const res = await fetch(`${MS_PAYMENT_URL}/ms/api/v1/payment/refund`, {
+    const raw: unknown = await req.json();
+    const { transactionId } = raw as { transactionId?: string };
+    if (!transactionId) {
+      return Response.json({ ok: false, data: null, message: "transactionId is required" }, { status: 400 });
+    }
+    const res = await fetch(`${BASE}/ms/api/v1/payment/refund`, {
       method: "POST",
-      headers: buildHeaders(token),
+      headers: {
+        "content-type": "application/json",
+        "x-request-channel": "WEB",
+        "x-request-id": randomUUID(),
+        authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({ transactionId, userId: username }),
     });
-    const body = await res.json();
+    const rawBody: unknown = await res.json();
+    const body = rawBody as MonolithEnvelope;
     if (!res.ok || body.code !== "00") {
-      return toEnvelope(false, null, body.message ?? "failed to refund", 400);
+      throw new Error(typeof body.message === "string" ? body.message : "failed to refund");
     }
-    return toEnvelope(true, body.data, "ok");
+    return Response.json({ ok: true, data: body.data ?? null, message: "ok" });
   } catch (e) {
-    return toEnvelope(false, null, (e as Error).message, 500);
+    return Response.json(
+      { ok: false, data: null, message: e instanceof Error ? e.message : "failed to refund" },
+      { status: 400 },
+    );
   }
 }

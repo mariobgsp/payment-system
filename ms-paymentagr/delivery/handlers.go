@@ -22,67 +22,58 @@ func getAdapter() *usecase.Adapter {
 	return usecase.NewAdapter(cfg, usecase.NewRedisStore(cfg), usecase.NewHttpNotifier(cfg.NotifyURL, cfg.NotifySecret))
 }
 
+// bind replaces 2x BindJSON + log + 400 blocks.
+func bind(c *gin.Context, rq any) bool {
+	if err := c.BindJSON(rq); err != nil {
+		log.Println("invalid request:", err)
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		return false
+	}
+	return true
+}
+
+func ok(c *gin.Context, v any) { c.IndentedJSON(http.StatusOK, v) }
+
 func ChargePayment(c *gin.Context) {
 	rq := new(models.ChargeRq)
-	if err := c.BindJSON(rq); err != nil {
-		log.Println("invalid charge request:", err)
-		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+	if !bind(c, rq) {
 		return
 	}
-	a := getAdapter()
-	rs, err := a.Charge(c.Request.Context(), rq.ReferenceId, *rq, "")
-	if err != nil {
+	if rs, err := getAdapter().Charge(c.Request.Context(), rq.ReferenceId, *rq, ""); err != nil {
 		writeApiError(c, err)
-		return
+	} else {
+		ok(c, rs)
 	}
-	c.IndentedJSON(http.StatusOK, rs)
 }
 
 func RefundPayment(c *gin.Context) {
 	rq := new(models.RefundRq)
-	if err := c.BindJSON(rq); err != nil {
-		log.Println("invalid refund request:", err)
-		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+	if !bind(c, rq) {
 		return
 	}
-	a := getAdapter()
-	rs, err := a.Refund(c.Request.Context(), rq.ReferenceId, *rq)
-	if err != nil {
+	if rs, err := getAdapter().Refund(c.Request.Context(), rq.ReferenceId, *rq); err != nil {
 		writeApiError(c, err)
-		return
+	} else {
+		ok(c, rs)
 	}
-	c.IndentedJSON(http.StatusOK, rs)
 }
 
 func RedirectPayment(c *gin.Context) {
-	trxid := c.Param("trxid")
-	a := getAdapter()
-	rs, err := a.Redirect(c.Request.Context(), trxid)
-	if err != nil {
+	if rs, err := getAdapter().Redirect(c.Request.Context(), c.Param("trxid")); err != nil {
 		writeApiError(c, err)
-		return
+	} else {
+		ok(c, rs)
 	}
-	c.IndentedJSON(http.StatusOK, rs)
 }
 
 func HealthCheck(c *gin.Context) {
-	a := getAdapter()
-	if rs, ok := a.Store().(*usecase.RedisStore); ok {
+	if rs, ok := getAdapter().Store().(*usecase.RedisStore); ok {
 		if err := rs.Ping(c.Request.Context()); err != nil {
-			c.IndentedJSON(http.StatusServiceUnavailable, gin.H{
-				"status":  "failed",
-				"code":    "99",
-				"message": "redis unavailable",
-			})
+			c.IndentedJSON(http.StatusServiceUnavailable, gin.H{"status": "failed", "code": "99", "message": "redis unavailable"})
 			return
 		}
 	}
-	// ponytail: fixed 5m TTL health — no per-request TTL knob
-	c.IndentedJSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"code":    "00",
-		"message": "success-check-health",
-	})
+	c.IndentedJSON(http.StatusOK, gin.H{"status": "ok", "code": "00", "message": "success-check-health"})
 }
 
 func writeApiError(c *gin.Context, err error) {
