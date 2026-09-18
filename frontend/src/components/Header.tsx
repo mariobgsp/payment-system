@@ -16,8 +16,10 @@ export default function Header() {
   useEffect(() => {
     fetch("/api/auth/me")
       .then(async (r): Promise<MeEnvelope> => (await r.json()) as MeEnvelope)
-      .then((b) => setUsername(typeof b.data?.username === "string" ? b.data.username : null))
-      .catch(() => setUsername(null));
+      .then((b) => { setUsername(typeof b.data?.username === "string" ? b.data.username : null); })
+      .catch(() => {
+        setUsername(null);
+      });
   }, []);
 
   async function logout() {
@@ -58,7 +60,7 @@ export default function Header() {
               {username}
             </span>
             <button
-              onClick={() => void logout()}
+              onClick={() => { void logout(); }}
               className="text-sm text-slate-400 transition hover:text-slate-100"
             >
               Sign out
