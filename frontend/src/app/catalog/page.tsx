@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Product } from "@/lib/types";
-import { formatIdr } from "@/lib/format";
+
+interface Product {
+  productCode: string;
+  productName: string;
+  price: number;
+  discount: number;
+  discountAvailable: boolean;
+}
 
 interface BffEnvelope {
   ok?: unknown;
@@ -11,13 +17,16 @@ interface BffEnvelope {
   data?: unknown;
 }
 
-// Local fetch helper (no cross-file value imports): GET/POST + envelope check.
-async function bff<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+// Local envelope check, no cross-file value imports.
+async function check<T>(res: Response, path: string): Promise<T> {
   const raw: unknown = await res.json();
   const body = raw as BffEnvelope;
   if (!body.ok) throw new Error(typeof body.message === "string" ? body.message : `${path} failed`);
   return body.data as T;
+}
+
+function formatIdr(value: number): string {
+  return "Rp " + value.toLocaleString("id-ID");
 }
 
 function totalPrice(p: Product, amount: number, enableDiscount: boolean): number {
@@ -43,8 +52,8 @@ export default function CatalogPage() {
   useEffect(() => {
     void (async () => {
       try {
-        await bff("/api/auth/me");
-        setProducts(await bff<Product[]>("/api/products"));
+        await check(await fetch("/api/auth/me"), "/api/auth/me");
+        setProducts(await check<Product[]>(await fetch("/api/products", { cache: "no-store" }), "/api/products"));
       } catch (err) {
         const msg = (err as Error).message;
         if (msg.includes("not authenticated")) router.replace("/login");
@@ -60,17 +69,20 @@ export default function CatalogPage() {
     setPlacing(true);
     setPlaceError(null);
     try {
-      const data = await bff<{ transactionId: string }>("/api/order", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          productCode: draft.product.productCode,
-          productName: draft.product.productName,
-          amount: draft.amount,
-          price: draft.product.price,
-          enableDiscount: draft.enableDiscount,
+      const data = await check<{ transactionId: string }>(
+        await fetch("/api/order", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            productCode: draft.product.productCode,
+            productName: draft.product.productName,
+            amount: draft.amount,
+            price: draft.product.price,
+            enableDiscount: draft.enableDiscount,
+          }),
         }),
-      });
+        "/api/order",
+      );
       sessionStorage.setItem(`order_${data.transactionId}`, JSON.stringify({ ...draft, productName: draft.product.productName }));
       router.push(`/pay/${data.transactionId}`);
     } catch (err) {
@@ -126,7 +138,7 @@ export default function CatalogPage() {
               <button
                 className="btn-secondary px-3 py-1.5"
                 disabled={placing}
-                onClick={() => setDraft({ product: p, amount: 1, enableDiscount: p.discountAvailable })}
+                onClick={() => { setDraft({ product: p, amount: 1, enableDiscount: p.discountAvailable }); }}
               >
                 Order
               </button>
@@ -136,14 +148,14 @@ export default function CatalogPage() {
       </div>
 
       {draft && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" onClick={() => setDraft(null)}>
-          <div className="card w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" onClick={() => { setDraft(null); }}>
+          <div className="card w-full max-w-md space-y-5" onClick={(e) => { e.stopPropagation(); }}>
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-100">Place order</h2>
                 <p className="mt-0.5 font-mono text-xs text-slate-500">{draft.product.productCode}</p>
               </div>
-              <button className="text-slate-500 hover:text-slate-200" onClick={() => setDraft(null)}>✕</button>
+              <button className="text-slate-500 hover:text-slate-200" onClick={() => { setDraft(null); }}>✕</button>
             </div>
             <div className="space-y-4">
               <div>
@@ -154,13 +166,13 @@ export default function CatalogPage() {
                   max={100}
                   className="input"
                   value={draft.amount}
-                  onChange={(e) => setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) })}
+                  onChange={(e) => { setDraft({ ...draft, amount: Math.max(1, Number(e.target.value) || 1) }); }}
                 />
               </div>
               {draft.product.discountAvailable && (
                 <label className="flex cursor-pointer items-center justify-between rounded-lg border border-ink-600 bg-ink-900 px-3 py-2.5">
                   <span className="text-sm text-slate-300">Apply {Math.round(draft.product.discount * 100)}% discount</span>
-                  <input type="checkbox" checked={draft.enableDiscount} onChange={(e) => setDraft({ ...draft, enableDiscount: e.target.checked })} className="h-4 w-4 accent-mint-500" />
+                  <input type="checkbox" checked={draft.enableDiscount} onChange={(e) => { setDraft({ ...draft, enableDiscount: e.target.checked }); }} className="h-4 w-4 accent-mint-500" />
                 </label>
               )}
               <div className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900 px-3 py-2.5">
@@ -172,7 +184,7 @@ export default function CatalogPage() {
               {placeError && (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{placeError}</div>
               )}
-              <button className="btn-primary w-full" disabled={placing} onClick={() => void placeOrder()}>
+              <button className="btn-primary w-full" disabled={placing} onClick={() => { void placeOrder(); }}>
                 {placing ? "Placing order…" : "Place order & continue to payment"}
               </button>
             </div>

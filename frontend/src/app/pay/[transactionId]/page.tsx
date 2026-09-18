@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { ProductTrx } from "@/lib/types";
-import { formatDate, formatIdr } from "@/lib/format";
+
+interface ProductTrx {
+  transactionId: string;
+  orderStatus: string;
+  paymentStatus: string;
+  productName: string;
+  productCode: string;
+  amount: number;
+  price: number;
+  priceCharge: number;
+  sysCreationDate: string;
+  paymentDate: string;
+}
 
 interface BffEnvelope {
   ok?: unknown;
@@ -11,13 +22,24 @@ interface BffEnvelope {
   data?: unknown;
 }
 
-// Local fetch helper (no cross-file value imports): GET/POST + envelope check.
-async function bff<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+// Local envelope check, no cross-file value imports. Call sites fetch literal
+// URLs directly so no user-controlled URL reaches the HTTP sink via a param.
+async function check<T>(res: Response, path: string): Promise<T> {
   const raw: unknown = await res.json();
   const body = raw as BffEnvelope;
   if (!body.ok) throw new Error(typeof body.message === "string" ? body.message : `${path} failed`);
   return body.data as T;
+}
+
+function formatIdr(value: number): string {
+  return "Rp " + value.toLocaleString("id-ID");
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 }
 
 // Map (not a keyed object) so dynamic status lookup isn't object injection.
@@ -57,9 +79,12 @@ export default function PayPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const data = await bff<ProductTrx>(`/api/order/check?transactionId=${encodeURIComponent(transactionId)}`);
+      const data = await check<ProductTrx>(
+        await fetch(`/api/order/check?transactionId=${encodeURIComponent(transactionId)}`, { cache: "no-store" }),
+        "/api/order/check",
+      );
       setTrx(data);
-      if (data?.paymentStatus === "SUCCESS" || data?.paymentStatus === "REFUND") {
+      if (data.paymentStatus === "SUCCESS" || data.paymentStatus === "REFUND") {
         setStep("done");
         stopPolling();
       }
@@ -77,11 +102,14 @@ export default function PayPage() {
     setError(null);
     setStep("paying");
     try {
-      const data = await bff<{ CheckoutUrl: string }>("/api/payment", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transactionId }),
-      });
+      const data = await check<{ CheckoutUrl: string }>(
+        await fetch("/api/payment", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ transactionId }),
+        }),
+        "/api/payment",
+      );
       setCheckoutUrl(data.CheckoutUrl);
       setStep("checking");
     } catch (err) {
@@ -93,19 +121,22 @@ export default function PayPage() {
   async function confirmAndPoll() {
     setStep("checking");
     await fetchStatus();
-    pollRef.current = setInterval(() => void fetchStatus(), 3000);
+    pollRef.current = setInterval(() => { void fetchStatus(); }, 3000);
   }
 
   async function refund() {
     setRefunding(true);
     setError(null);
     try {
-      await bff("/api/payment/refund", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transactionId }),
-      });
-      pollRef.current = setInterval(() => void fetchStatus(), 3000);
+      await check(
+        await fetch("/api/payment/refund", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ transactionId }),
+        }),
+        "/api/payment/refund",
+      );
+      pollRef.current = setInterval(() => { void fetchStatus(); }, 3000);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -120,7 +151,7 @@ export default function PayPage() {
           <h1 className="text-2xl font-semibold text-slate-100">Payment</h1>
           <p className="mt-1 font-mono text-sm text-slate-500">TRX {transactionId}</p>
         </div>
-        <button className="text-sm text-slate-400 transition hover:text-slate-100" onClick={() => router.push("/catalog")}>
+        <button className="text-sm text-slate-400 transition hover:text-slate-100" onClick={() => { router.push("/catalog"); }}>
           ← Back to catalog
         </button>
       </div>
@@ -160,7 +191,7 @@ export default function PayPage() {
       )}
 
       {step === "idle" && !trx?.paymentDate && (
-        <button className="btn-primary w-full" onClick={() => void createPayment()}>Create payment</button>
+        <button className="btn-primary w-full" onClick={() => { void createPayment(); }}>Create payment</button>
       )}
 
       {checkoutUrl && (
@@ -168,7 +199,7 @@ export default function PayPage() {
           <p className="text-sm text-slate-300">Your payment session is ready. Open the partner payment page to confirm the payment.</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="btn-primary flex-1">Open payment page</a>
-            <button className="btn-secondary flex-1" onClick={() => void confirmAndPoll()}>I&apos;ve completed payment — check status</button>
+            <button className="btn-secondary flex-1" onClick={() => { void confirmAndPoll(); }}>I&apos;ve completed payment — check status</button>
           </div>
           <p className="break-all font-mono text-xs text-slate-500">{checkoutUrl}</p>
         </div>
@@ -191,7 +222,7 @@ export default function PayPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary flex-1" disabled={refunding} onClick={() => void refund()}>
+            <button className="btn-secondary flex-1" disabled={refunding} onClick={() => { void refund(); }}>
               {refunding ? "Requesting…" : "Request refund"}
             </button>
             <a className="btn-secondary flex-1" href="/refund">Go to refunds</a>
