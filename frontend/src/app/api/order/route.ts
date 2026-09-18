@@ -38,16 +38,6 @@ async function session(): Promise<{ token: string; username: string } | null> {
   return { token, username };
 }
 
-async function backend<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init);
-  const raw: unknown = await res.json();
-  const body = raw as MonolithEnvelope;
-  if (!res.ok || body.code !== "00") {
-    throw new Error(typeof body.message === "string" ? body.message : `backend ${res.status}`);
-  }
-  return body.data as T;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const sess = await session();
@@ -64,15 +54,20 @@ export async function POST(req: NextRequest) {
     if (!productCode || !productName || !amount || amount < 1 || !price) {
       return fail("invalid order payload", 400);
     }
-    const data = await backend(
-      `/ms/api/v1/order/product?username=${encodeURIComponent(username)}`,
+    const res = await fetch(
+      `${BASE}/ms/api/v1/order/product?username=${encodeURIComponent(username)}`,
       {
         method: "POST",
         headers: headers(token),
         body: JSON.stringify({ productCode, productName, amount, price, enableDiscount, userDetail: { username } }),
       },
     );
-    return ok(data);
+    const rawBody: unknown = await res.json();
+    const body = rawBody as MonolithEnvelope;
+    if (!res.ok || body.code !== "00") {
+      throw new Error(typeof body.message === "string" ? body.message : "failed to create order");
+    }
+    return ok(body.data ?? null);
   } catch (e) {
     return fail(e instanceof Error ? e.message : "failed to create order", 400);
   }
